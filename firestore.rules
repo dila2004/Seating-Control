@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function activeUser() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && userDoc().status == 'ACTIVE';
+    }
+
+    function hasRole(roles) {
+      return activeUser() && userDoc().role in roles;
+    }
+
+    // A user may read only their own profile. Client writes are deliberately disabled.
+    // Create/update user profiles using a trusted Admin SDK process or Cloud Function.
+    match /users/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if hasRole(['ADMIN']);
+      allow create, update, delete: if false;
+    }
+
+    // Phase 1: authenticated active users can read operational reference data.
+    // Operational writes will be added through validated Cloud Functions in later phases.
+    match /employees/{employeeId} {
+      allow read: if activeUser();
+      allow write: if false;
+    }
+
+    match /platforms/{platformId} {
+      allow read: if activeUser();
+      allow write: if false;
+    }
+
+    match /seatings/{seatingId} {
+      allow read: if activeUser();
+      allow write: if false;
+    }
+
+    match /settings/{settingId} {
+      allow read: if activeUser();
+      allow write: if hasRole(['ADMIN']) && false;
+    }
+
+    match /seatingHistory/{historyId} {
+      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
+      allow write: if false;
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
+      allow write: if false;
+    }
+
+    // Deny access to all collections not explicitly allowed above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

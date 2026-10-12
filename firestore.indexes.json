@@ -1,0 +1,31 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "seatings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "businessDate", "order": "ASCENDING" },
+        { "fieldPath": "shift", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "seatings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "platformId", "order": "ASCENDING" },
+        { "fieldPath": "businessDate", "order": "ASCENDING" },
+        { "fieldPath": "shift", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "seatings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "employeeId", "order": "ASCENDING" },
+        { "fieldPath": "businessDate", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

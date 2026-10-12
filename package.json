@@ -1,0 +1,19 @@
+{
+  "name": "seating-control-center",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules,firestore:indexes"
+  },
+  "dependencies": {
+    "firebase": "12.4.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "vite": "^7.1.7"
+  }
+}
