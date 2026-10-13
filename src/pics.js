@@ -37,11 +37,11 @@ export async function renderPicsPage(container, profile) {
       </div>
       <div class="panel module-table-panel" style="margin-top:20px">
         <div class="panel-heading"><div><h3>Daily platform assignments</h3>
-          <p>Assign a PIC to monitor the Operation Officers on a platform for a specific date and shift.</p></div>
+          <p>Assign a PIC per platform, date and shift. Day: 08:30–20:30 · Night: 20:30–08:30. Assignments do not carry over between shifts.</p></div>
           ${admin ? '<button class="button button-primary" id="add-assignment">＋ Assign PIC for day</button>' : ''}
         </div>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Shift</th><th>Platform</th><th>PIC</th><th>Status</th></tr></thead>
-          <tbody id="assignment-rows"><tr><td colspan="5" class="table-empty">Loading…</td></tr></tbody></table></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Shift</th><th>Platform</th><th>PIC</th><th>Status</th>${admin ? '<th>Actions</th>' : ''}</tr></thead>
+          <tbody id="assignment-rows"><tr><td colspan="${admin ? 6 : 5}" class="table-empty">Loading…</td></tr></tbody></table></div>
       </div>
     </section>
 
@@ -57,11 +57,11 @@ export async function renderPicsPage(container, profile) {
     </div>
 
     <div class="modal-backdrop hidden" id="assignment-modal" role="dialog" aria-modal="true">
-      <div class="modal-card pic-assignment-modal" style="width:min(720px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:28px"><div class="modal-heading"><div><div class="eyebrow">DAILY ASSIGNMENT</div><h2>Assign PIC to platform</h2></div>
+      <div class="modal-card pic-assignment-modal" style="width:min(720px,calc(100vw - 32px));max-height:90vh;overflow:auto;padding:28px"><div class="modal-heading"><div><div class="eyebrow">DAILY ASSIGNMENT</div><h2 id="assignment-modal-title">Assign PIC to platform</h2></div>
         <button class="icon-button" id="close-assignment" type="button">×</button></div>
         <form id="assignment-form" class="pic-assignment-form">
           <div class="pic-form-grid"><div class="pic-field"><label for="assignment-date">Business date</label><input id="assignment-date" name="date" type="date" required value="${todayLocal()}"></div>
-          <div class="pic-field"><label for="assignment-shift">Shift</label><select id="assignment-shift" name="shift" required><option value="MORNING">MORNING</option><option value="NIGHT">NIGHT</option></select></div>
+          <div class="pic-field"><label for="assignment-shift">Shift</label><select id="assignment-shift" name="shift" required><option value="MORNING">Day · 08:30–20:30</option><option value="NIGHT">Night · 20:30–08:30</option></select></div>
           <div class="pic-field pic-field-full"><label for="assignment-platform">Platform</label><select id="assignment-platform" name="platformId" required><option value="">Loading platforms…</option></select><small id="platform-help">Platforms are loaded from Firestore.</small></div>
           <div class="pic-field pic-field-full"><label for="assignment-pic">PIC</label><select id="assignment-pic" name="picId" required><option value="">Loading PICs…</option></select></div></div>
           <div class="modal-actions"><button type="button" class="button button-outline" id="cancel-assignment">Cancel</button><button type="submit" class="button button-primary" id="save-assignment">Save assignment</button></div>
@@ -77,7 +77,7 @@ export async function renderPicsPage(container, profile) {
     .pic-assignment-modal .pic-field-full { grid-column:1 / -1; }
     .pic-assignment-modal .pic-field label { font-size:13px; font-weight:600; color:#334155; }
     .pic-assignment-modal input, .pic-assignment-modal select { width:100%; box-sizing:border-box; min-height:44px; border:1px solid #d6e0ee; border-radius:9px; padding:10px 12px; background:#fff; color:#1f2937; font:inherit; }
-    .pic-assignment-modal small { color:#64748b; font-size:12px; }
+    .pic-assignment-modal small { color:#64748b; font-size:12px; }\n    .button-small { padding:7px 10px; font-size:12px; }
     .pic-assignment-modal .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
     @media(max-width:560px) { .pic-assignment-modal .pic-form-grid { grid-template-columns:1fr; } .pic-assignment-modal .pic-field-full { grid-column:auto; } }
   `;
@@ -173,11 +173,61 @@ export async function renderPicsPage(container, profile) {
       const snap = await getDocs(query(collection(db, 'picAssignments'), limit(500)));
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
         .sort((a, b) => `${b.date || ''}${b.shift || ''}`.localeCompare(`${a.date || ''}${a.shift || ''}`));
+      const colspan = admin ? 6 : 5;
       $('#assignment-rows').innerHTML = rows.length
-        ? rows.map((a) => `<tr><td>${esc(a.date)}</td><td>${esc(a.shift)}</td><td>${esc(a.platformId)}</td><td>${esc(a.picName || a.picId)}</td><td>${statusPill(a.status)}</td></tr>`).join('')
-        : '<tr><td colspan="5" class="table-empty">No daily assignments yet.</td></tr>';
+        ? rows.map((a) => `<tr>
+            <td>${esc(a.date)}</td>
+            <td>${a.shift === 'MORNING' ? 'Day · 08:30–20:30' : a.shift === 'NIGHT' ? 'Night · 20:30–08:30' : esc(a.shift)}</td>
+            <td>${esc(a.platformId)}</td>
+            <td>${esc(a.picName || a.picId)}</td>
+            <td>${statusPill(a.status)}</td>
+            ${admin ? `<td><div style="display:flex;gap:6px;flex-wrap:wrap">
+              <button type="button" class="button button-outline button-small" data-edit-assignment="${esc(a.id)}">Edit / Replace</button>
+              ${a.status === 'ACTIVE' ? `<button type="button" class="button button-outline button-small" data-remove-assignment="${esc(a.id)}">Remove</button>` : ''}
+            </div></td>` : ''}
+          </tr>`).join('')
+        : `<tr><td colspan="${colspan}" class="table-empty">No daily assignments yet.</td></tr>`;
+
+      if (admin) {
+        $('#assignment-rows').querySelectorAll('[data-edit-assignment]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const assignment = rows.find((a) => a.id === button.dataset.editAssignment);
+            if (!assignment) return;
+            try {
+              await populateAssignmentOptions();
+              $('#assignment-form').dataset.editId = assignment.id;
+              $('#assignment-modal-title').textContent = 'Edit / Replace PIC';
+              $('#assignment-date').value = assignment.date || todayLocal();
+              $('#assignment-shift').value = assignment.shift || 'MORNING';
+              $('#assignment-platform').value = assignment.platformId || '';
+              $('#assignment-pic').value = assignment.picId || '';
+              $('#save-assignment').textContent = 'Update assignment';
+              $('#assignment-modal').classList.remove('hidden');
+            } catch (e) {
+              msg(`Could not open assignment: ${friendlyError(e)}`, true);
+            }
+          });
+        });
+        $('#assignment-rows').querySelectorAll('[data-remove-assignment]').forEach((button) => {
+          button.addEventListener('click', async () => {
+            const assignment = rows.find((a) => a.id === button.dataset.removeAssignment);
+            if (!assignment) return;
+            if (!confirm(`Remove PIC ${assignment.picName || assignment.picId} from ${assignment.platformId} on ${assignment.date} (${assignment.shift})? The record will be retained as inactive.`)) return;
+            try {
+              await updateDoc(doc(db, 'picAssignments', assignment.id), {
+                status: 'INACTIVE',
+                updatedAt: serverTimestamp()
+              });
+              msg('Assignment removed. History is retained as INACTIVE.');
+              await loadAssignments();
+            } catch (e) {
+              msg(`Could not remove assignment: ${friendlyError(e)}`, true);
+            }
+          });
+        });
+      }
     } catch (e) {
-      $('#assignment-rows').innerHTML = `<tr><td colspan="5" class="table-empty">Could not load assignments: ${esc(friendlyError(e))}</td></tr>`;
+      $('#assignment-rows').innerHTML = `<tr><td colspan="${admin ? 6 : 5}" class="table-empty">Could not load assignments: ${esc(friendlyError(e))}</td></tr>`;
     }
   }
 
@@ -294,7 +344,14 @@ export async function renderPicsPage(container, profile) {
     $('#add-assignment').addEventListener('click', async () => {
       try {
         await populateAssignmentOptions();
+        $('#assignment-form').reset();
+        delete $('#assignment-form').dataset.editId;
+        $('#assignment-modal-title').textContent = 'Assign PIC to platform';
+        $('#save-assignment').textContent = 'Save assignment';
         $('#assignment-date').value = todayLocal();
+        const now = new Date();
+        const minutes = now.getHours() * 60 + now.getMinutes();
+        $('#assignment-shift').value = minutes >= 510 && minutes < 1230 ? 'MORNING' : 'NIGHT';
         $('#assignment-modal').classList.remove('hidden');
       } catch (e) {
         msg(`Could not load platforms or PICs: ${friendlyError(e)}`, true);
@@ -312,21 +369,47 @@ export async function renderPicsPage(container, profile) {
       if (!date || !['MORNING', 'NIGHT'].includes(shift) || !platformId || !picId) {
         msg('Select a date, shift, platform and PIC.', true); return;
       }
-      const assignmentId = `${date}_${shift}_${platformId}`.replace(/[^A-Za-z0-9_-]/g, '-');
+
+      const isEdit = Boolean(form.dataset.editId);
+      const assignmentId = form.dataset.editId ||
+        `${date}_${shift}_${platformId}`.replace(/[^A-Za-z0-9_-]/g, '-');
+      const ref = doc(db, 'picAssignments', assignmentId);
       const button = $('#save-assignment');
-      button.disabled = true; button.textContent = 'Saving…';
+      button.disabled = true;
+      button.textContent = isEdit ? 'Updating…' : 'Saving…';
       try {
-        const ref = doc(db, 'picAssignments', assignmentId);
-        if ((await getDoc(ref)).exists()) throw new Error('A PIC is already assigned to this platform, date and shift.');
-        await setDoc(ref, {
-          assignmentId, date, shift, platformId, picId, picName, status: 'ACTIVE',
-          createdAt: serverTimestamp(), updatedAt: serverTimestamp()
-        });
-        form.reset(); $('#assignment-date').value = todayLocal(); closeAssignment();
-        msg(`PIC ${picId} assigned to ${platformId} for ${date} (${shift}).`);
+        const existing = await getDoc(ref);
+        const payload = {
+          assignmentId, date, shift, platformId, picId, picName,
+          status: 'ACTIVE',
+          updatedAt: serverTimestamp()
+        };
+        if (isEdit) {
+          if (!existing.exists()) throw new Error('Assignment record no longer exists. Refresh the list.');
+          await updateDoc(ref, payload);
+        } else if (existing.exists()) {
+          if (existing.data().status === 'INACTIVE') {
+            await updateDoc(ref, payload);
+          } else {
+            throw new Error('This platform already has an active PIC for that date and shift. Use Edit / Replace.');
+          }
+        } else {
+          await setDoc(ref, { ...payload, createdAt: serverTimestamp() });
+        }
+        form.reset();
+        delete form.dataset.editId;
+        $('#assignment-date').value = todayLocal();
+        $('#assignment-modal-title').textContent = 'Assign PIC to platform';
+        closeAssignment();
+        $('#save-assignment').textContent = 'Save assignment';
+        msg(isEdit ? 'PIC assignment updated.' : 'PIC assignment saved.');
         await loadAssignments();
-      } catch (e) { msg(friendlyError(e), true); }
-      finally { button.disabled = false; button.textContent = 'Save assignment'; }
+      } catch (e) {
+        msg(`Could not save assignment: ${friendlyError(e)}`, true);
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Save assignment';
+      }
     });
   }
   $('#refresh-pics').addEventListener('click', async () => {

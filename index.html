@@ -4,16 +4,444 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10233f" />
-    <meta name="description" content="Seating Control Center workplace operations dashboard" />
+    <meta
+      name="description"
+      content="Seating Control Center workplace operations dashboard"
+    />
     <title>Seating Control Center</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      :root {
+        font-family: "DM Sans", sans-serif;
+        color: #eaf1fb;
+        background: #0b1930;
+        font-synthesis: none;
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        --navy: #10233f;
+        --navy-light: #193454;
+        --blue: #6b9cff;
+        --muted: #9aacc5;
+        --line: rgba(173, 198, 233, 0.16);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body {
+        margin: 0;
+        min-width: 320px;
+        min-height: 100%;
+      }
+
+      body {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+
+      #app {
+        min-height: 100vh;
+        min-height: 100dvh;
+      }
+
+      .boot-screen {
+        position: relative;
+        isolation: isolate;
+        display: grid;
+        min-height: 100vh;
+        min-height: 100dvh;
+        place-items: center;
+        overflow: hidden;
+        padding: 32px 20px;
+        background:
+          radial-gradient(ellipse at 50% 35%, rgba(44, 87, 145, 0.28), transparent 42%),
+          radial-gradient(ellipse at 12% 90%, rgba(38, 79, 132, 0.18), transparent 36%),
+          linear-gradient(145deg, #0a172b 0%, #10233f 52%, #0b1a30 100%);
+      }
+
+      .boot-screen::before,
+      .boot-screen::after {
+        position: absolute;
+        z-index: -1;
+        content: "";
+        pointer-events: none;
+      }
+
+      .boot-screen::before {
+        inset: 0;
+        opacity: 0.22;
+        background-image:
+          linear-gradient(rgba(177, 202, 236, 0.07) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(177, 202, 236, 0.07) 1px, transparent 1px);
+        background-size: 44px 44px;
+        mask-image: linear-gradient(to bottom, black, transparent 88%);
+      }
+
+      .boot-screen::after {
+        width: min(680px, 90vw);
+        aspect-ratio: 1;
+        border: 1px solid rgba(146, 183, 235, 0.08);
+        border-radius: 50%;
+        box-shadow:
+          0 0 0 58px rgba(146, 183, 235, 0.025),
+          0 0 0 116px rgba(146, 183, 235, 0.02);
+        animation: halo 7s ease-in-out infinite;
+      }
+
+      .boot-content {
+        width: min(100%, 390px);
+        text-align: center;
+        animation: reveal 700ms cubic-bezier(.2, .7, .2, 1) both;
+      }
+
+      .boot-brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        margin-bottom: 48px;
+      }
+
+      .boot-mark {
+        position: relative;
+        display: grid;
+        width: 54px;
+        height: 54px;
+        place-items: center;
+        overflow: hidden;
+        border: 1px solid rgba(161, 194, 242, 0.34);
+        border-radius: 16px;
+        background: linear-gradient(145deg, #2b4c76, #172d4c);
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.2), inset 0 1px rgba(255,255,255,.12);
+        color: #fff;
+        font-family: "Manrope", sans-serif;
+        font-size: 18px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+
+      .boot-mark::after {
+        position: absolute;
+        inset: -60% auto -60% -35%;
+        width: 28%;
+        content: "";
+        transform: rotate(25deg);
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,.28), transparent);
+        animation: shine 3.8s ease-in-out infinite;
+      }
+
+      .boot-brand-copy { text-align: left; }
+
+      .boot-brand-copy strong {
+        display: block;
+        color: #f4f7fd;
+        font-family: "Manrope", sans-serif;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: -0.2px;
+      }
+
+      .boot-brand-copy span {
+        display: block;
+        margin-top: 5px;
+        color: #9bb0cd;
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 2px;
+      }
+
+      .boot-orbit {
+        position: relative;
+        display: grid;
+        width: 100px;
+        height: 100px;
+        place-items: center;
+        margin: 0 auto 29px;
+      }
+
+      .boot-orbit::before,
+      .boot-orbit::after {
+        position: absolute;
+        inset: 0;
+        border: 1px solid rgba(137, 177, 237, 0.18);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .boot-orbit::after {
+        inset: 10px;
+        border-color: rgba(137, 177, 237, 0.12);
+      }
+
+      .boot-spinner {
+        position: absolute;
+        inset: 0;
+        border: 2px solid transparent;
+        border-top-color: #86b1ff;
+        border-right-color: rgba(134, 177, 255, 0.5);
+        border-radius: 50%;
+        animation: spin 1.35s linear infinite;
+      }
+
+      .boot-spinner-inner {
+        position: absolute;
+        inset: 11px;
+        border: 2px solid transparent;
+        border-bottom-color: rgba(115, 160, 235, 0.7);
+        border-left-color: rgba(115, 160, 235, 0.22);
+        border-radius: 50%;
+        animation: spin-reverse 2.2s linear infinite;
+      }
+
+      .boot-center-icon {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid rgba(156, 190, 240, 0.18);
+        border-radius: 13px;
+        background: rgba(62, 99, 153, 0.22);
+        color: #c3d9ff;
+      }
+
+      .boot-center-icon svg { width: 22px; height: 22px; }
+
+      .boot-eyebrow {
+        margin: 0 0 12px;
+        color: #91b7f7;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 2.5px;
+        text-transform: uppercase;
+      }
+
+      .boot-title {
+        margin: 0;
+        color: #f5f8ff;
+        font-family: "Manrope", sans-serif;
+        font-size: clamp(24px, 5vw, 31px);
+        font-weight: 800;
+        letter-spacing: -1.15px;
+        line-height: 1.2;
+      }
+
+      .boot-description {
+        max-width: 300px;
+        margin: 13px auto 0;
+        color: #a0b1c9;
+        font-size: 12px;
+        line-height: 1.75;
+      }
+
+      .boot-progress-wrap {
+        margin: 34px 0 0;
+        text-align: left;
+      }
+
+      .boot-progress-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 10px;
+        color: #b5c5dc;
+        font-size: 10px;
+      }
+
+      .boot-progress-label span:last-child {
+        color: #d8e5fa;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .boot-progress-track {
+        height: 4px;
+        overflow: hidden;
+        border-radius: 99px;
+        background: rgba(172, 196, 230, 0.14);
+      }
+
+      .boot-progress-bar {
+        width: 0;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #4b7fe4, #9bc0ff);
+        box-shadow: 0 0 14px rgba(107, 156, 255, 0.5);
+        animation: progress 2.4s ease-out forwards;
+      }
+
+      .boot-status {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        margin-top: 22px;
+        color: #8fa4c1;
+        font-size: 10px;
+      }
+
+      .boot-status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #42d6a0;
+        box-shadow: 0 0 0 4px rgba(66, 214, 160, 0.1);
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      .boot-footer {
+        position: absolute;
+        right: 20px;
+        bottom: 22px;
+        left: 20px;
+        color: #7186a4;
+        font-size: 9px;
+        letter-spacing: 0.5px;
+        text-align: center;
+      }
+
+      .boot-footer span { color: #a0b5d2; }
+
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @keyframes spin-reverse { to { transform: rotate(-360deg); } }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: .55; transform: scale(.82); }
+      }
+      @keyframes halo {
+        0%, 100% { transform: scale(.96); opacity: .65; }
+        50% { transform: scale(1.04); opacity: 1; }
+      }
+      @keyframes shine {
+        0%, 20% { left: -35%; }
+        55%, 100% { left: 130%; }
+      }
+      @keyframes reveal {
+        from { opacity: 0; transform: translateY(12px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes progress {
+        0% { width: 0; }
+        35% { width: 38%; }
+        72% { width: 76%; }
+        100% { width: 92%; }
+      }
+
+      @media (max-width: 480px) {
+        .boot-brand { margin-bottom: 38px; }
+        .boot-mark { width: 48px; height: 48px; border-radius: 14px; }
+        .boot-title { letter-spacing: -0.8px; }
+        .boot-description { font-size: 11px; }
+        .boot-footer { bottom: 15px; font-size: 8px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          scroll-behavior: auto !important;
+        }
+      }
+    </style>
   </head>
+
   <body>
     <div id="app">
-      <div class="boot-screen">
-        <div class="boot-mark">SC</div>
-        <p>Loading Seating Control Center…</p>
-      </div>
+      <main class="boot-screen" aria-label="Loading Seating Control Center">
+        <section class="boot-content" aria-live="polite">
+          <div class="boot-brand">
+            <div class="boot-mark" aria-hidden="true">SC</div>
+            <div class="boot-brand-copy">
+              <strong>Seating Control Center</strong>
+              <span>WORKPLACE OPERATIONS</span>
+            </div>
+          </div>
+
+          <div class="boot-orbit" aria-hidden="true">
+            <div class="boot-spinner"></div>
+            <div class="boot-spinner-inner"></div>
+            <div class="boot-center-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="4" width="6" height="6" rx="1.5"></rect>
+                <rect x="14" y="4" width="6" height="6" rx="1.5"></rect>
+                <rect x="4" y="14" width="6" height="6" rx="1.5"></rect>
+                <rect x="14" y="14" width="6" height="6" rx="1.5"></rect>
+              </svg>
+            </div>
+          </div>
+
+          <p class="boot-eyebrow">Secure workspace</p>
+          <h1 class="boot-title">Getting everything ready.</h1>
+          <p class="boot-description">
+            Preparing your workspace, synchronizing operations, and setting up your dashboard.
+          </p>
+
+          <div class="boot-progress-wrap" aria-label="Loading progress">
+            <div class="boot-progress-label">
+              <span id="boot-progress-text">Initializing workspace</span>
+              <span id="boot-progress-number">0%</span>
+            </div>
+            <div
+              class="boot-progress-track"
+              role="progressbar"
+              aria-label="Application loading"
+              aria-valuemin="0"
+              aria-valuemax="100"
+              aria-valuenow="0"
+              id="boot-progress"
+            >
+              <div class="boot-progress-bar" id="boot-progress-bar"></div>
+            </div>
+          </div>
+
+          <div class="boot-status">
+            <span class="boot-status-dot" aria-hidden="true"></span>
+            <span>Establishing secure session</span>
+          </div>
+        </section>
+
+        <footer class="boot-footer">
+          <span>SEATING CONTROL CENTER</span> &nbsp;·&nbsp; Workplace operations platform
+        </footer>
+      </main>
     </div>
+
+    <script>
+      // Cosmetic loading indicator only. Your app continues to initialize through main.js.
+      (() => {
+        const number = document.getElementById("boot-progress-number");
+        const label = document.getElementById("boot-progress-text");
+        const progress = document.getElementById("boot-progress");
+        const messages = [
+          { at: 0, text: "Initializing workspace" },
+          { at: 35, text: "Preparing dashboard" },
+          { at: 70, text: "Loading workspace modules" },
+          { at: 90, text: "Almost ready" }
+        ];
+        const start = performance.now();
+        const duration = 2400;
+
+        function update(now) {
+          const elapsed = Math.min(now - start, duration);
+          const percent = Math.round((elapsed / duration) * 92);
+          number.textContent = percent + "%";
+          progress.setAttribute("aria-valuenow", String(percent));
+
+          const current = [...messages].reverse().find((item) => percent >= item.at);
+          if (current) label.textContent = current.text;
+
+          if (elapsed < duration) requestAnimationFrame(update);
+        }
+
+        requestAnimationFrame(update);
+      })();
+    </script>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

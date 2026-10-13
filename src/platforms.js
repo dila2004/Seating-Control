@@ -25,7 +25,7 @@ export async function renderPlatformsPage(container, profile) {
     <section class="module-page">
       <div class="module-heading">
         <div><div class="eyebrow">WORKSPACE / CONFIGURATION</div><h1>Platforms</h1><p>Manage your company's platforms using flexible IDs.</p></div>
-        ${canManage ? '<button class="button button-primary" id="add-platform">＋ Add platform</button>' : ''}
+        ${canManage ? '<div class="module-heading-actions"><button class="button button-outline" id="bulk-add-platforms">＋ Add many</button><button class="button button-primary" id="add-platform">＋ Add platform</button></div>' : ''}
       </div>
       <div class="module-toolbar">
         <label class="search-box"><span aria-hidden="true">⌕</span><input id="platform-search" type="search" placeholder="Search platform name or ID…" aria-label="Search platforms"></label>
@@ -51,12 +51,21 @@ export async function renderPlatformsPage(container, profile) {
         <div class="modal-actions"><button type="button" class="button button-outline" id="cancel-platform-modal">Cancel</button><button type="submit" class="button button-primary" id="save-platform">Save platform</button></div></form>
       </div>
     </div>
+    <div class="modal-backdrop hidden" id="bulk-platform-modal" role="dialog" aria-modal="true" aria-labelledby="bulk-platform-title">
+      <div class="modal-card"><div class="modal-heading"><div><div class="eyebrow">BULK SETUP</div><h2 id="bulk-platform-title">Add multiple platforms</h2></div><button class="icon-button" id="close-bulk-platform-modal" aria-label="Close">×</button></div>
+        <p class="muted-inline">Add 25+ platforms at once. Enter one platform per line in this format: <strong>Platform name | platform-id</strong></p>
+        <div class="module-message">Example:<br>Jax 1 | jax-1<br>Jax 2 | jax-2<br>Kane 1 | kane-1</div>
+        <form id="bulk-platform-form"><label for="bulk-platform-input">Platform list</label><textarea id="bulk-platform-input" rows="10" required placeholder="Jax 1 | jax-1&#10;Jax 2 | jax-2&#10;Kane 1 | kane-1"></textarea>
+        <div class="modal-actions"><button type="button" class="button button-outline" id="cancel-bulk-platform-modal">Cancel</button><button type="submit" class="button button-primary" id="save-bulk-platforms">Add platforms</button></div></form>
+      </div>
+    </div>
   `;
 
   const $ = (selector) => container.querySelector(selector);
   const rowsEl = $('#platform-rows');
   const messageEl = $('#platform-message');
   const modal = $('#platform-modal');
+  const bulkModal = $('#bulk-platform-modal');
   let platforms = [];
 
   const showMessage = (message, isError = false) => {
@@ -68,6 +77,11 @@ export async function renderPlatformsPage(container, profile) {
   const closeModal = () => modal.classList.add('hidden');
 
   $('#add-platform')?.addEventListener('click', openModal);
+  const closeBulkModal = () => bulkModal.classList.add('hidden');
+  $('#bulk-add-platforms')?.addEventListener('click', () => bulkModal.classList.remove('hidden'));
+  $('#close-bulk-platform-modal').addEventListener('click', closeBulkModal);
+  $('#cancel-bulk-platform-modal').addEventListener('click', closeBulkModal);
+  bulkModal.addEventListener('click', (event) => { if (event.target === bulkModal) closeBulkModal(); });
   $('#close-platform-modal').addEventListener('click', closeModal);
   $('#cancel-platform-modal').addEventListener('click', closeModal);
   modal.addEventListener('click', (event) => {
@@ -143,6 +157,39 @@ export async function renderPlatformsPage(container, profile) {
   $('#platform-search').addEventListener('input', renderRows);
   $('#platform-status-filter').addEventListener('change', renderRows);
   $('#reload-platforms').addEventListener('click', load);
+
+  $('#bulk-platform-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    if (!canManage) { showMessage('Only an active Admin can manage platforms.', true); return; }
+    const saveButton = $('#save-bulk-platforms');
+    const lines = $('#bulk-platform-input').value.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const entries = [];
+    const seen = new Set(platforms.map(p => normalizePlatformId(p.platformId || p.id)));
+    for (let i = 0; i < lines.length; i++) {
+      const parts = lines[i].split('|').map(part => part.trim());
+      if (parts.length < 2) { showMessage(`Line ${i + 1}: use Platform name | platform-id.`, true); return; }
+      const name = parts[0];
+      const platformId = normalizePlatformId(parts[1]);
+      if (!name || !validPlatformId(platformId)) { showMessage(`Line ${i + 1}: invalid name or ID. Use letters/numbers and hyphens, e.g. jax-1.`, true); return; }
+      if (seen.has(platformId)) { showMessage(`Duplicate or existing platform ID: ${platformId}. No platforms were added.`, true); return; }
+      seen.add(platformId); entries.push({ name, platformId });
+    }
+    if (!entries.length) { showMessage('Enter at least one platform.', true); return; }
+    saveButton.disabled = true; saveButton.textContent = `Adding ${entries.length}…`;
+    try {
+      for (const entry of entries) {
+        await setDoc(doc(db, 'platforms', entry.platformId), {
+          ...entry, description: '', status: 'ACTIVE', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+        });
+      }
+      closeBulkModal(); $('#bulk-platform-form').reset();
+      showMessage(`${entries.length} platform(s) added successfully.`);
+      await load();
+    } catch (error) {
+      showMessage(`Some platforms may already have been added before this error: ${friendlyError(error)}`, true);
+      await load();
+    } finally { saveButton.disabled = false; saveButton.textContent = 'Add platforms'; }
+  });
 
   $('#platform-form').addEventListener('submit', async (event) => {
     event.preventDefault();
