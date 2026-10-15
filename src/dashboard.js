@@ -20,6 +20,11 @@ import { renderAddSeatingPage } from './addSeating.js';
 import { renderCurrentSeatingPage } from './seatings.js';
 import { renderPicsPage } from './pics.js';
 import { renderHistoryPage } from './history.js';
+import { renderUsersPage } from './users.js';
+import { getShiftSettings, resolveShift } from './shiftSettings.js';
+import { renderSettingsPage } from './settings.js';
+import { renderCompliancePage } from './compliance.js';
+import { renderReportsPage } from './reports.js';
 
 
 
@@ -43,11 +48,11 @@ const navByRole = {
 
 
 
-  TL: ['Dashboard', 'Current Seating', 'Pending Approval', 'Employees', 'Platforms', 'Compliance', 'History', 'Reports'],
+  TL: ['Dashboard', 'Current Seating', 'Add Seating', 'Pending Approval', 'Employees', 'PIC Management', 'Platforms', 'Compliance', 'History', 'Reports'],
 
 
 
-  SPV: ['Dashboard', 'Current Seating', 'Pending Approval', 'Employees', 'Platforms', 'Compliance', 'History', 'Reports'],
+  SPV: ['Dashboard', 'Current Seating', 'Add Seating', 'Pending Approval', 'Employees', 'PIC Management', 'Platforms', 'Compliance', 'History', 'Reports'],
 
 
 
@@ -63,18 +68,8 @@ const navByRole = {
 
 
 
-function currentShift(date = new Date()) {
-
-
-
-  const mins = date.getHours() * 60 + date.getMinutes();
-
-
-
-  return mins >= 450 && mins < 1170 ? 'MORNING' : 'NIGHT';
-
-
-
+function currentShift(date = new Date(), settings) {
+  return resolveShift(settings, date);
 }
 
 
@@ -123,7 +118,11 @@ async function loadSummary() {
 
 
 
-  const shift = currentShift();
+  const shiftSettings = await getShiftSettings();
+
+
+
+  const shift = currentShift(new Date(), shiftSettings);
 
 
 
@@ -277,7 +276,7 @@ export async function renderDashboard(root, user, profile) {
 
 
 
-          <div class="summary-strip"><div><span class="summary-label">BUSINESS DATE</span><strong id="business-date">${fmtDate()}</strong></div><div><span class="summary-label">CURRENT SHIFT</span><strong id="current-shift">${currentShift()}</strong></div><div><span class="summary-label">YOUR ROLE</span><strong>${escapeHtml(role)}</strong></div><div><span class="summary-label">PLATFORMS</span><strong id="platform-count">—</strong></div></div>
+          <div class="summary-strip"><div><span class="summary-label">BUSINESS DATE</span><strong id="business-date">${fmtDate()}</strong></div><div><span class="summary-label">CURRENT SHIFT</span><strong id="current-shift">Loading…</strong></div><div><span class="summary-label">YOUR ROLE</span><strong>${escapeHtml(role)}</strong></div><div><span class="summary-label">PLATFORMS</span><strong id="platform-count">—</strong></div></div>
 
 
 
@@ -361,13 +360,37 @@ export async function renderDashboard(root, user, profile) {
       } else if (page === 'Pending Approval') {
         await renderApprovalsPage(root.querySelector('#page-content'), profile);
       } else if (page === 'PIC Management') {
-      if (role !== 'ADMIN') {
-        showAlert('Access denied. PIC Management is available to administrators only.');
+      if (!['ADMIN', 'TL', 'SPV'].includes(role)) {
+        showAlert('Access denied. PIC Management is available to administrators, Team Leads, and Supervisors.');
         return;
       }
       await renderPicsPage(root.querySelector('#page-content'), profile);
+    } else if (page === 'Compliance') {
+      if (!['PIC', 'TL', 'SPV', 'ADMIN'].includes(String(role).toUpperCase())) {
+        showAlert('Access denied. Compliance is available to PIC, Team Leads, Supervisors, and Administrators.');
+        return;
+      }
+      await renderCompliancePage(root.querySelector('#page-content'), profile);
+    } else if (page === 'Reports') {
+      if (!['PIC', 'TL', 'SPV', 'ADMIN'].includes(role)) {
+        showAlert('Access denied. Reports are available to PIC, Team Leads, Supervisors, and Administrators.');
+        return;
+      }
+      await renderReportsPage(root.querySelector('#page-content'), profile);
     } else if (page === 'History') {
       await renderHistoryPage(root.querySelector('#page-content'), user, profile);
+    } else if (page === 'Settings') {
+      if (String(role).toUpperCase() !== 'ADMIN') {
+        showAlert('Access denied. Settings are available to administrators only.');
+        return;
+      }
+      await renderSettingsPage(root.querySelector('#page-content'), profile);
+    } else if (page === 'Users') {
+      if (role !== 'ADMIN') {
+        showAlert('Access denied. User Management is available to administrators only.');
+        return;
+      }
+      await renderUsersPage(root.querySelector('#page-content'), user, profile);
     } else if (page === 'Dashboard') {
 
 

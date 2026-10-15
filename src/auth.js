@@ -6,6 +6,20 @@ import {
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db, firebaseConfigError } from './firebase.js';
 
+function normalizeEmployeeId(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9._-]/g, '');
+}
+
+function authEmailForIdentifier(identifier) {
+  const value = String(identifier || '').trim();
+  // Admins (and any account configured with a real email) can continue using email.
+  if (value.includes('@')) return value;
+  const employeeId = normalizeEmployeeId(value);
+  if (!employeeId) throw new Error('Enter your Admin email or Employee ID.');
+  // Must match the internal email generated when an Employee-ID-only account is created.
+  return `${employeeId}@users.seating-control.local`;
+}
+
 export function watchAuth(callback) {
   if (firebaseConfigError) {
     callback({ kind: 'config-error', message: firebaseConfigError });
@@ -40,9 +54,10 @@ export function watchAuth(callback) {
   });
 }
 
-export async function login(email, password) {
+export async function login(identifier, password) {
   if (firebaseConfigError) throw new Error(firebaseConfigError);
-  await signInWithEmailAndPassword(auth, email.trim(), password);
+  const email = authEmailForIdentifier(identifier);
+  await signInWithEmailAndPassword(auth, email, password);
 }
 
 export async function logout() {
@@ -53,8 +68,8 @@ export async function logout() {
 export function friendlyError(error) {
   const code = error?.code || '';
   const messages = {
-    'auth/invalid-credential': 'Email or password is incorrect.',
-    'auth/invalid-email': 'Enter a valid email address.',
+    'auth/invalid-credential': 'Email/Employee ID or password is incorrect.',
+    'auth/invalid-email': 'Enter a valid Admin email or Employee ID.',
     'auth/too-many-requests': 'Too many attempts. Wait a little and try again.',
     'auth/network-request-failed': 'Network error. Check your internet connection.',
     'permission-denied': 'Access denied by Firestore Security Rules.',

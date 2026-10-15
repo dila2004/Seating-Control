@@ -40,7 +40,7 @@ export async function renderPlatformsPage(container, profile) {
       <div class="panel module-table-panel">
         <div class="panel-heading"><div><h3>Platform directory</h3><p>Platform IDs such as jax-1, kane-1, and iris-7 are supported.</p></div><span class="panel-chip" id="platform-result-count">Loading…</span></div>
         <div id="platform-message" class="module-message hidden" role="status"></div>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Platform</th><th>Platform ID</th><th>Laptop allocation (GS / DP / WD)</th><th>Seating balance</th><th>Status</th><th>Actions</th></tr></thead><tbody id="platform-rows"><tr><td colspan="7" class="table-empty">Loading platforms…</td></tr></tbody></table></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Platform</th><th>Platform ID</th><th>Laptop allocation (GS / DP / WD)</th><th>4NS allocation (KBZ / Wave)</th><th>Seating balance</th><th>Status</th><th>Actions</th></tr></thead><tbody id="platform-rows"><tr><td colspan="7" class="table-empty">Loading platforms…</td></tr></tbody></table></div>
       </div>
       <div class="phase-note"><div class="phase-icon">i</div><div><strong>Flexible platform IDs</strong><p>IDs may contain lowercase letters, numbers and hyphens. Platform changes are restricted by Firestore Security Rules.</p></div></div>
     </section>
@@ -56,6 +56,11 @@ export async function renderPlatformsPage(container, profile) {
           <label for="platform-gs">GS laptops<input id="platform-gs" type="number" min="0" max="500" value="0" required></label>
           <label for="platform-dp">DP laptops<input id="platform-dp" type="number" min="0" max="500" value="0" required></label>
           <label for="platform-wd">WD laptops<input id="platform-wd" type="number" min="0" max="500" value="0" required></label>
+        </div>
+        <p class="muted-inline">4NS account allocation</p>
+        <div class="platform-capacity-grid platform-four-ns-grid">
+          <label for="platform-kbz-4ns">KBZ 4NS count<input id="platform-kbz-4ns" type="number" min="0" max="500" value="0" required></label>
+          <label for="platform-wave-4ns">Wave 4NS count<input id="platform-wave-4ns" type="number" min="0" max="500" value="0" required></label>
         </div>
         <label for="platform-description">Description <span class="muted-inline">(optional)</span></label><textarea id="platform-description" name="description" rows="3" maxlength="300" placeholder="Short description"></textarea>
         <div class="modal-actions"><button type="button" class="button button-outline" id="cancel-platform-modal">Cancel</button><button type="submit" class="button button-primary" id="save-platform">Save platform</button></div></form>
@@ -76,6 +81,7 @@ export async function renderPlatformsPage(container, profile) {
     .platform-capacity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 16px}
     .platform-capacity-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}
     .platform-capacity-grid input{width:100%;box-sizing:border-box}
+    .platform-four-ns-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
     .balance-pill{display:inline-block;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:700;white-space:nowrap}
     .balance-low{background:#fee2e2;color:#991b1b}.balance-ok{background:#dcfce7;color:#166534}.balance-high{background:#dbeafe;color:#1d4ed8}.balance-na{background:#e5e7eb;color:#374151}
     @media(max-width:700px){.platform-capacity-grid{grid-template-columns:1fr}}
@@ -100,6 +106,7 @@ export async function renderPlatformsPage(container, profile) {
     $('#platform-form').reset();
     $('#platform-id').disabled = false;
     $('#platform-gs').value = 0; $('#platform-dp').value = 0; $('#platform-wd').value = 0;
+    $('#platform-kbz-4ns').value = 0; $('#platform-wave-4ns').value = 0;
     $('#platform-modal-title').textContent = 'Add platform';
     $('#save-platform').textContent = 'Save platform';
   };
@@ -131,6 +138,7 @@ export async function renderPlatformsPage(container, profile) {
       const active = status === 'ACTIVE';
       const category = String(platform.category || (platform.platformId || platform.id).split('-')[0] || '').toUpperCase();
       const capacity = platform.laptopCapacity || {};
+      const fourNsCapacity = platform.fourNsCapacity || {};
       const expected = { GS: Number(capacity.GS || 0), DP: Number(capacity.DP || 0), WD: Number(capacity.WD || 0) };
       const current = { GS: 0, DP: 0, WD: 0 };
       seatings.filter(s => String(s.platformId || '').toLowerCase() === String(platform.platformId || platform.id).toLowerCase()
@@ -145,6 +153,7 @@ export async function renderPlatformsPage(container, profile) {
         <td><div class="table-primary-text">${escapeHtml(platform.name || platform.platformId || platform.id)}</div><div class="table-secondary-text">${escapeHtml(platform.description || 'No description')}</div></td>
         <td><code class="id-chip">${escapeHtml(platform.platformId || platform.id)}</code></td>
         <td>GS ${expected.GS} · DP ${expected.DP} · WD ${expected.WD}<div class="table-secondary-text">Seated: GS ${current.GS}, DP ${current.DP}, WD ${current.WD}</div></td>
+        <td>KBZ 4NS: ${Number(fourNsCapacity.KBZ || 0)}<div class="table-secondary-text">Wave 4NS: ${Number(fourNsCapacity.WAVE || 0)}</div></td>
         <td><span class="balance-pill ${balanceClass}">${escapeHtml(balanceText)}</span></td>
         <td><span class="status-pill ${active ? 'complete' : 'empty'}">${escapeHtml(status)}</span></td>
         <td><button class="button button-outline button-small edit-platform" data-id="${escapeHtml(platform.id)}" ${canManage ? '' : 'disabled'}>Edit</button> <button class="button button-outline button-small toggle-platform" data-id="${escapeHtml(platform.id)}" data-active="${active ? 'true' : 'false'}" ${canManage ? '' : 'disabled'}>${active ? 'Deactivate' : 'Activate'}</button></td>
@@ -167,6 +176,8 @@ export async function renderPlatformsPage(container, profile) {
         $('#platform-gs').value = Number(p.laptopCapacity?.GS || 0);
         $('#platform-dp').value = Number(p.laptopCapacity?.DP || 0);
         $('#platform-wd').value = Number(p.laptopCapacity?.WD || 0);
+        $('#platform-kbz-4ns').value = Number(p.fourNsCapacity?.KBZ || 0);
+        $('#platform-wave-4ns').value = Number(p.fourNsCapacity?.WAVE || 0);
         openModal();
       });
     });
@@ -244,7 +255,7 @@ export async function renderPlatformsPage(container, profile) {
     try {
       for (const entry of entries) {
         await setDoc(doc(db, 'platforms', entry.platformId), {
-          ...entry, description: '', status: 'ACTIVE', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
+          ...entry, description: '', laptopCapacity: { GS: 0, DP: 0, WD: 0 }, fourNsCapacity: { KBZ: 0, WAVE: 0 }, status: 'ACTIVE', createdAt: serverTimestamp(), updatedAt: serverTimestamp()
         });
       }
       closeBulkModal(); $('#bulk-platform-form').reset();
@@ -268,6 +279,7 @@ export async function renderPlatformsPage(container, profile) {
     const category = $('#platform-category').value.trim().toUpperCase();
     const name = $('#platform-name').value.trim();
     const description = $('#platform-description').value.trim();
+    const fourNsCapacity = { KBZ: Number($('#platform-kbz-4ns').value || 0), WAVE: Number($('#platform-wave-4ns').value || 0) };
     const laptopCapacity = {
       GS: Number($('#platform-gs').value || 0),
       DP: Number($('#platform-dp').value || 0),
@@ -287,12 +299,12 @@ export async function renderPlatformsPage(container, profile) {
     saveButton.textContent = 'Saving…';
     try {
       if (!category) { showMessage('Enter the main category, e.g. JAX or KANE.', true); return; }
-      if (Object.values(laptopCapacity).some(n => !Number.isInteger(n) || n < 0 || n > 500)) {
-        showMessage('Laptop counts must be whole numbers between 0 and 500.', true); return;
+      if ([...Object.values(laptopCapacity), ...Object.values(fourNsCapacity)].some(n => !Number.isInteger(n) || n < 0 || n > 500)) {
+        showMessage('Laptop and 4NS counts must be whole numbers between 0 and 500.', true); return;
       }
       // Updates only the platform configuration fields; existing platform status and records are preserved.
       const wasEditing = Boolean(editingId);
-      const payload = { category, name, description, laptopCapacity, updatedAt: serverTimestamp() };
+      const payload = { category, name, description, laptopCapacity, fourNsCapacity, updatedAt: serverTimestamp() };
       if (editingId) {
         await updateDoc(doc(db, 'platforms', editingId), payload);
       } else {

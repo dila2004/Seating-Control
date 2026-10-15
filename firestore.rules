@@ -1,73 +1,536 @@
 rules_version = '2';
+
 service cloud.firestore {
+
   match /databases/{database}/documents {
+
     function signedIn() {
+
       return request.auth != null;
+
     }
 
-    function userPath() {
-      return /databases/$(database)/documents/users/$(request.auth.uid);
-    }
+
 
     function userDocExists() {
-      return signedIn() && exists(userPath());
+
+      return signedIn() &&
+
+        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+
     }
 
-    function userDoc() {
-      return get(userPath()).data;
+
+
+    function me() {
+
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+
     }
+
+
 
     function activeUser() {
-      return userDocExists() && userDoc().status == 'ACTIVE';
+
+      return userDocExists() && me().status == 'ACTIVE';
+
     }
 
-    function hasRole(roles) {
-      return activeUser() && userDoc().role in roles;
+
+
+    function admin() { return activeUser() && me().role == 'ADMIN'; }
+
+    function gs() {
+
+      return activeUser() && me().role == 'STAFF' && me().department == 'GS';
+
     }
+
+    function pic() { return activeUser() && me().role == 'PIC'; }
+
+    function tl() { return activeUser() && me().role == 'TL'; }
+
+    function spv() { return activeUser() && me().role == 'SPV'; }
+
+    function reviewer() { return pic() || tl() || spv(); }
+
+
+
+    function validOperationEmployee(employeeId) {
+
+      return employeeId is string
+
+        && exists(/databases/$(database)/documents/employees/$(employeeId))
+
+        && get(/databases/$(database)/documents/employees/$(employeeId)).data.status == 'ACTIVE'
+
+        && get(/databases/$(database)/documents/employees/$(employeeId)).data.department in ['GS', 'DP', 'WD'];
+
+    }
+
+
+
+    function activePlatform(platformId) {
+
+      return platformId is string
+
+        && exists(/databases/$(database)/documents/platforms/$(platformId))
+
+        && get(/databases/$(database)/documents/platforms/$(platformId)).data.status == 'ACTIVE';
+
+    }
+
+
+
+    function allowedPlatform(platformId) {
+
+      return admin() || (
+
+        gs()
+
+        && me().allowedPlatforms is list
+
+        && platformId in me().allowedPlatforms
+
+      );
+
+    }
+
+
+
+    function validGSCreate() {
+
+      let d = request.resource.data;
+
+      return d.keys().hasAll([
+
+          'seatingId', 'businessDate', 'date', 'shift', 'employeeId',
+
+          'employeeName', 'platformId', 'laptopName', 'handledAccount',
+
+          'withdrawalWork', 'status', 'createdBy', 'createdAt', 'createdByRole'
+
+        ])
+
+        && d.keys().hasOnly([
+
+          'seatingId', 'businessDate', 'date', 'shift', 'employeeId',
+
+          'employeeName', 'employeeType', 'department', 'platformId', 'platformName',
+
+          'laptopName', 'handledAccount', 'handledAccounts', 'withdrawalWork', 'withdrawalWorks',
+
+          'status', 'createdBy', 'createdByName', 'createdByRole', 'createdAt',
+
+          'updatedAt', 'approvedBy', 'approvedAt', 'changeCount',
+
+          'transferRequestId', 'transferredFromSeatingId', 'transferredByRequestId'
+
+        ])
+
+        && d.businessDate is string
+
+        && d.date == d.businessDate
+
+        && d.shift in ['MORNING', 'NIGHT']
+
+        && d.employeeId is string
+
+        && d.employeeName is string
+
+        && d.platformId is string
+
+        && d.laptopName is string
+
+        && d.handledAccount is string
+
+        && (!('handledAccounts' in d) || d.handledAccounts is list)
+
+        && (!('withdrawalWorks' in d) || d.withdrawalWorks is list)
+
+        && d.withdrawalWork in ['YES', 'NO', 'NOT_APPLICABLE', 'BIG_MONEY', 'CASH_ERRORS', 'REDEMPTIONS', 'CASH_ACCOUNT_ADDING', 'OTHER']
+
+        && d.status == 'PENDING'
+
+        && d.createdAt == request.time
+
+        && d.createdBy == me().employeeId
+
+        && d.createdByRole == 'STAFF'
+
+        && validOperationEmployee(d.employeeId)
+
+        && activePlatform(d.platformId)
+
+        && allowedPlatform(d.platformId);
+
+    }
+
+
+
+    function validTransferRequestCreate() {
+
+      let d = request.resource.data;
+
+      return activeUser()
+
+        && (admin() || gs())
+
+        && d.keys().hasAll([
+
+          'requestType', 'employeeId', 'businessDate', 'date', 'shift',
+
+          'fromSeatingId', 'fromPlatformId', 'toPlatformId', 'requestedBy',
+
+          'status', 'createdAt'
+
+        ])
+
+        && d.keys().hasOnly([
+
+          'requestType', 'employeeId', 'employeeName', 'department', 'businessDate', 'date', 'shift',
+
+          'fromSeatingId', 'fromPlatformId', 'fromPlatformName', 'fromPicId',
+
+          'toPlatformId', 'toPlatformName', 'toLaptopName', 'handledAccount',
+
+          'handledAccounts', 'withdrawalWorks', 'withdrawalWork', 'requestedBy',
+
+          'requestedByName', 'toPicId', 'status', 'createdAt', 'updatedAt', 'reviewedBy', 'reviewedAt', 'rejectionReason'
+
+        ])
+
+        && d.status == 'PENDING'
+
+        && d.requestType == 'TRANSFER'
+
+        && d.employeeId is string
+
+        && d.businessDate is string
+
+        && d.date == d.businessDate
+
+        && d.shift in ['MORNING', 'NIGHT']
+
+        && d.fromSeatingId is string
+
+        && d.fromPlatformId is string
+
+        && d.toPlatformId is string
+
+        && d.fromPlatformId != d.toPlatformId
+
+        && d.requestedBy == me().employeeId
+
+        && d.createdAt == request.time
+
+        && validOperationEmployee(d.employeeId)
+
+        && activePlatform(d.toPlatformId);
+
+    }
+
+
+
+    function validTransferCreate() {
+
+      let d = request.resource.data;
+
+      return (admin() || pic())
+
+        && d.transferRequestId is string
+
+        && exists(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId))
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId)).data.status == 'PENDING'
+
+        && d.keys().hasAll([
+
+          'seatingId', 'businessDate', 'date', 'shift', 'employeeId', 'employeeName',
+
+          'platformId', 'laptopName', 'handledAccount', 'withdrawalWork', 'status',
+
+          'createdBy', 'createdByRole', 'createdAt', 'transferRequestId', 'transferredFromSeatingId'
+
+        ])
+
+        && d.keys().hasOnly([
+
+          'seatingId', 'businessDate', 'date', 'shift', 'employeeId', 'employeeName',
+
+          'department', 'employeeType', 'platformId', 'platformName', 'laptopName',
+
+          'handledAccount', 'handledAccounts', 'withdrawalWork', 'withdrawalWorks',
+
+          'status', 'createdBy', 'createdByName', 'createdByRole', 'createdAt', 'updatedAt',
+
+          'approvedBy', 'approvedAt', 'changeCount', 'transferredFromSeatingId', 'transferRequestId'
+
+        ])
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId)).data.employeeId == d.employeeId
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId)).data.toPlatformId == d.platformId
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId)).data.fromSeatingId == d.transferredFromSeatingId
+
+        && (admin() || get(/databases/$(database)/documents/seatingChangeRequests/$(d.transferRequestId)).data.fromPicId == me().employeeId)
+
+        && d.status == 'PENDING'
+
+        && d.createdAt == request.time
+
+        && activePlatform(d.platformId);
+
+    }
+
+
 
     match /users/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
-      allow list: if hasRole(['ADMIN']);
-      allow create, update, delete: if false;
+
+      allow read: if admin() || (activeUser() && request.auth.uid == uid);
+
+      allow create, update, delete: if admin();
+
     }
+
+
 
     match /employees/{employeeId} {
+
       allow read: if activeUser();
-      allow write: if false;
+
+      allow create, update, delete: if admin();
+
     }
+
+
 
     match /platforms/{platformId} {
+
       allow read: if activeUser();
-      allow write: if false;
+
+      allow create, update, delete: if admin();
+
     }
+
+
+
+    // Keep the PIC directory collection supported by the PIC Management page.
+
+    match /pics/{picId} {
+
+      allow read: if activeUser();
+
+      allow create, update, delete: if admin();
+
+    }
+
+
+
+    match /picAssignments/{assignmentId} {
+
+      allow read: if activeUser();
+
+      allow create, update, delete: if admin();
+
+    }
+
+
 
     match /seatings/{seatingId} {
+
       allow read: if activeUser();
-      allow write: if false;
+
+      allow create: if admin() || (gs() && validGSCreate()) || validTransferCreate();
+
+
+
+      // Admin can manage records. Reviewers can approve/reject pending records
+
+      // by changing only the documented review fields. Locked-record changes
+
+      // should use a separate audited transfer workflow.
+
+      allow update: if admin() || (
+
+        reviewer()
+
+        && resource.data.status == 'PENDING'
+
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+
+          'status', 'approvedBy', 'approvedAt', 'updatedAt', 'reviewedBy',
+
+          'reviewedAt', 'rejectedBy', 'rejectedAt', 'returnReason', 'reviewNote'
+
+        ])
+
+        && request.resource.data.status in ['APPROVED', 'LOCKED', 'REJECTED', 'RETURNED']
+
+      ) || (
+
+        pic()
+
+        && resource.data.status in ['APPROVED', 'LOCKED']
+
+        && request.resource.data.status == 'TRANSFERRED'
+
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+
+          'status', 'transferredByRequestId', 'transferredAt', 'transferredToPlatformId', 'transferredToPlatformName', 'updatedAt'
+
+        ])
+
+        && request.resource.data.transferredByRequestId is string
+
+        && exists(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferredByRequestId))
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferredByRequestId)).data.status == 'PENDING'
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferredByRequestId)).data.fromPicId == me().employeeId
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferredByRequestId)).data.fromSeatingId == seatingId
+
+      );
+
+
+
+      allow delete: if admin();
+
     }
 
-    match /settings/{settingId} {
-      allow read: if activeUser();
-      allow write: if false;
-    }
 
-    match /seatingHistory/{historyId} {
-      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
-      allow write: if false;
-    }
-
-    match /auditLogs/{logId} {
-      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
-      allow write: if false;
-    }
 
     match /seatingChangeRequests/{requestId} {
-      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
-      allow write: if false;
+
+      allow read: if activeUser();
+
+      allow create: if validTransferRequestCreate();
+
+      allow update: if admin() || (
+
+        pic()
+
+        && resource.data.status == 'PENDING'
+
+        && (
+
+          (('toPicId' in resource.data) && resource.data.toPicId == me().employeeId)
+
+          || (!('toPicId' in resource.data) && resource.data.fromPicId == me().employeeId)
+
+        )
+
+        && request.resource.data.status in ['APPROVED', 'REJECTED']
+
+        && request.resource.data.reviewedBy == me().employeeId
+
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+
+          'status', 'reviewedBy', 'reviewedAt', 'updatedAt'
+
+        ])
+
+      );
+
+      allow delete: if admin();
+
     }
 
-    match /{document=**} {
-      allow read, write: if false;
+
+
+    match /seatingHistory/{historyId} {
+
+      allow read: if activeUser();
+
+      allow create: if admin() || (
+
+        pic()
+
+        && request.resource.data.action == 'TRANSFERRED'
+
+        && request.resource.data.transferRequestId is string
+
+        && exists(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferRequestId))
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferRequestId)).data.status == 'PENDING'
+
+        && get(/databases/$(database)/documents/seatingChangeRequests/$(request.resource.data.transferRequestId)).data.fromPicId == me().employeeId
+
+      );
+
+      allow update, delete: if admin();
+
     }
+
+
+
+    match /auditLogs/{logId} {
+
+      allow read: if admin() || reviewer();
+
+      allow create: if admin() || reviewer();
+
+      allow update, delete: if admin();
+
+    }
+
+
+
+    match /settings/{settingId} {
+
+      allow read: if activeUser();
+
+      allow create, update, delete: if admin();
+
+    }
+
+
+
+    // Admin-only application configuration used by the Settings page.
+
+    // Only the known configuration documents may be read or changed.
+
+    match /systemSettings/{settingId} {
+
+      allow read, create, update, delete: if admin()
+
+        && settingId in ['general', 'shifts', 'approvals'];
+
+    }
+
+
+
+    // Settings page audit trail. Admins can review entries and create
+
+    // client-side best-effort records. Existing entries cannot be edited
+
+    // or deleted from the client.
+
+    match /systemSettingsAudit/{auditId} {
+
+      allow read: if admin();
+
+      allow create: if admin()
+
+        && request.resource.data.keys().hasOnly([
+          'action', 'section', 'details', 'actorUid', 'actorName',
+          'actorRole', 'createdAt'
+        ]);
+
+      allow update, delete: if false;
+
+    }
+
+
+
+    match /{document=**} {
+
+      allow read, write: if false;
+
+    }
+
   }
+
 }

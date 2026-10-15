@@ -58,12 +58,25 @@ export async function renderHistoryPage(root, user, profile) {
         <button class="button button-secondary" id="history-clear">Clear filters</button>
       </div>
       <div class="history-table-wrap"><table class="data-table history-table"><thead><tr><th>Date / Time</th><th>Action</th><th>Employee</th><th>Platform movement</th><th>Seat details</th><th>Status</th><th>Performed by</th><th>Reason / response</th></tr></thead><tbody id="history-rows"><tr><td colspan="8">Loading history…</td></tr></tbody></table></div>
+      <div id="history-pagination" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border,#e3e8ef)">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted,#64748b)">Rows per page
+          <select id="history-page-size" class="input" style="width:auto;min-width:78px;padding:7px 10px">
+            <option value="10" selected>10</option><option value="20">20</option><option value="50">50</option>
+          </select>
+        </label>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span id="history-page-label" style="font-size:12px;color:var(--muted,#64748b)">Page 1 of 1</span>
+          <button class="button button-secondary" id="history-prev" type="button" disabled>← Previous</button>
+          <button class="button button-secondary" id="history-next" type="button" disabled>Next →</button>
+        </div>
+      </div>
       <div class="panel-footer"><span id="history-footer">Loading records…</span><span>History records are read-only.</span></div>
     </section>`;
 
   const alertEl = root.querySelector('#history-alert');
   const rowsEl = root.querySelector('#history-rows');
   let all = [];
+  let currentPage = 1;
   const showAlert = (msg, bad = false) => { alertEl.textContent = msg; alertEl.classList.remove('hidden'); alertEl.classList.toggle('alert-danger', bad); };
   const clearAlert = () => { alertEl.textContent = ''; alertEl.classList.add('hidden'); alertEl.classList.remove('alert-danger'); };
 
@@ -80,13 +93,30 @@ export async function renderHistoryPage(root, user, profile) {
       const time = (v) => { const x = v?.toDate ? v.toDate().getTime() : new Date(v || 0).getTime(); return Number.isFinite(x) ? x : 0; };
       return time(b.timestamp) - time(a.timestamp);
     });
+
+    const pageSize = Number(root.querySelector('#history-page-size')?.value || 10);
+    const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+    currentPage = Math.min(Math.max(currentPage, 1), pageCount);
+    const startIndex = (currentPage - 1) * pageSize;
+    const pageRows = filtered.slice(startIndex, startIndex + pageSize);
+
     root.querySelector('#history-count').textContent = filtered.length;
     root.querySelector('#history-moves').textContent = filtered.filter((r) => /TRANSFER|CHANGE_PLATFORM|MOVEMENT/i.test(r.action)).length;
     root.querySelector('#history-approved').textContent = filtered.filter((r) => /APPROV|LOCKED/i.test(`${r.action} ${r.status}`)).length;
     root.querySelector('#history-rejected').textContent = filtered.filter((r) => /REJECT|RETURN/i.test(`${r.action} ${r.status}`)).length;
-    root.querySelector('#history-footer').textContent = `${filtered.length} record(s) shown from ${all.length} loaded`;
-    if (!filtered.length) { rowsEl.innerHTML = '<tr><td colspan="8" class="empty-state">No history records match these filters.</td></tr>'; return; }
-    rowsEl.innerHTML = filtered.map((r) => {
+
+    const shownStart = filtered.length ? startIndex + 1 : 0;
+    const shownEnd = Math.min(startIndex + pageSize, filtered.length);
+    root.querySelector('#history-footer').textContent = `Showing ${shownStart}–${shownEnd} of ${filtered.length} matching records (${all.length} loaded)`;
+    root.querySelector('#history-page-label').textContent = `Page ${currentPage} of ${pageCount}`;
+    root.querySelector('#history-prev').disabled = currentPage <= 1;
+    root.querySelector('#history-next').disabled = currentPage >= pageCount;
+
+    if (!pageRows.length) {
+      rowsEl.innerHTML = '<tr><td colspan="8" class="empty-state">No history records match these filters.</td></tr>';
+      return;
+    }
+    rowsEl.innerHTML = pageRows.map((r) => {
       const move = r.oldPlatform && r.platform ? `${r.oldPlatform} → ${r.platform}` : (r.platform || '—');
       const details = [r.laptop && `Laptop: ${stringify(r.laptop)}`, r.account && `Work: ${stringify(r.account)}`, r.businessDate && `Date: ${r.businessDate}`, r.shift].filter(Boolean).join(' · ');
       return `<tr><td><strong>${esc(dateText(r.timestamp))}</strong><small>${esc(r.businessDate || '')}</small></td><td><strong>${esc(String(r.action).replaceAll('_',' '))}</strong><small>${esc(r.source)}</small></td><td><strong>${esc(r.employeeName || 'Unknown employee')}</strong><small>${esc(r.employeeId || '—')}</small></td><td>${esc(move)}</td><td>${esc(details || '—')}</td><td><span class="${statusClass(r.status)}">${esc(r.status || 'RECORDED')}</span></td><td>${esc(r.performedBy || '—')}<small>${esc(r.role || '')}</small></td><td class="history-reason">${esc(r.reason || '—')}</td></tr>`;
@@ -126,12 +156,16 @@ export async function renderHistoryPage(root, user, profile) {
     } finally { root.querySelector('#history-refresh').disabled = false; }
   }
 
-  ['history-search', 'history-date', 'history-shift', 'history-action'].forEach((id) => root.querySelector(`#${id}`).addEventListener('input', renderRows));
+  ['history-search', 'history-date', 'history-shift', 'history-action'].forEach((id) => root.querySelector(`#${id}`).addEventListener('input', () => { currentPage = 1; renderRows(); }));
+  root.querySelector('#history-page-size').addEventListener('change', () => { currentPage = 1; renderRows(); });
+  root.querySelector('#history-prev').addEventListener('click', () => { currentPage -= 1; renderRows(); });
+  root.querySelector('#history-next').addEventListener('click', () => { currentPage += 1; renderRows(); });
   root.querySelector('#history-clear').addEventListener('click', () => {
     root.querySelector('#history-search').value = '';
     root.querySelector('#history-date').value = '';
     root.querySelector('#history-shift').value = '';
     root.querySelector('#history-action').value = '';
+    currentPage = 1;
     renderRows();
   });
   root.querySelector('#history-refresh').addEventListener('click', load);
