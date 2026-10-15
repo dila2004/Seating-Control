@@ -1,4 +1,4 @@
-import { collection, getDocs, limit, query, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, limit, query, doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase.js';
 import { friendlyError } from './auth.js';
 import * as XLSX from 'xlsx';
@@ -25,9 +25,10 @@ export async function renderEmployeesPage(container, profile) {
     <div class="module-summary" id="employee-summary"></div>
     <div class="panel module-table-panel"><div class="panel-heading"><div><h3>Employee directory</h3><p>Employee department and PIC monitoring are separate records.</p></div><span class="panel-chip" id="employee-result-count">Loading…</span></div>
       <div id="employee-message" class="module-message hidden" role="status"></div>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Department</th><th>Platform</th><th>Status</th></tr></thead><tbody id="employee-rows"><tr><td colspan="5" class="table-empty">Loading employees…</td></tr></tbody></table></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Employee</th><th>Employee ID</th><th>Department</th><th>Platform</th><th>Status</th>${canManage ? '<th>Actions</th>' : ''}</tr></thead><tbody id="employee-rows"><tr><td colspan="${canManage ? 6 : 5}" class="table-empty">Loading employees…</td></tr></tbody></table></div>
     </div>
   </section>
+  <style>.employee-row-actions{display:flex;gap:6px;align-items:center;white-space:nowrap}.employee-row-actions .button{padding:6px 10px;font-size:12px}.employee-row-actions .employee-remove{color:#b42318;border-color:#f2c5c2}</style>
   <div class="modal-backdrop hidden" id="employee-modal" role="dialog" aria-modal="true" aria-labelledby="employee-modal-title"><div class="modal-card">
     <div class="modal-heading"><div><div class="eyebrow">EMPLOYEE MANAGEMENT</div><h2 id="employee-modal-title">Add employee</h2></div><button class="icon-button" id="close-employee-modal">×</button></div>
     <form id="employee-form">
@@ -45,16 +46,20 @@ export async function renderEmployeesPage(container, profile) {
   </div></div>`;
 
   const $ = s => container.querySelector(s);
-  let employees = [], importRows = [];
+  let employees = [], importRows = [], editingEmployeeId = null;
   const message = (txt, error=false) => { $('#employee-message').textContent=txt; $('#employee-message').classList.remove('hidden'); $('#employee-message').classList.toggle('warning-message', error); };
-  const close = () => $('#employee-modal').classList.add('hidden');
+  const close = () => { $('#employee-modal').classList.add('hidden'); editingEmployeeId = null; $('#emp-id').readOnly = false; $('#employee-modal-title').textContent = 'Add employee'; $('#save-employee').textContent = 'Save employee'; };
   const closeImport = () => $('#import-modal').classList.add('hidden');
 
   function renderRows() {
     const term = $('#employee-search').value.trim().toLowerCase(), dept = $('#employee-department-filter').value, status = $('#employee-status-filter').value;
     const filtered = employees.filter(e => [e.name,e.employeeId,e.department,e.platformId,e.defaultPlatform].join(' ').toLowerCase().includes(term) && (dept==='ALL'||e.department===dept) && (status==='ALL'||normStatus(e.status)===status));
     $('#employee-result-count').textContent = `${filtered.length} shown`;
-    $('#employee-rows').innerHTML = filtered.length ? filtered.map(e => `<tr><td><div class="table-primary-text">${esc(e.name)}</div></td><td><code class="id-chip">${esc(e.employeeId||e.id)}</code></td><td>${esc(e.department)}</td><td>${esc(e.platformId||e.defaultPlatform||'—')}</td><td><span class="status-pill ${normStatus(e.status)==='ACTIVE'?'complete':'empty'}">${esc(normStatus(e.status))}</span></td></tr>`).join('') : '<tr><td colspan="5" class="table-empty">No employees match these filters.</td></tr>';
+    $('#employee-rows').innerHTML = filtered.length ? filtered.map(e => `<tr><td><div class="table-primary-text">${esc(e.name)}</div></td><td><code class="id-chip">${esc(e.employeeId||e.id)}</code></td><td>${esc(e.department)}</td><td>${esc(e.platformId||e.defaultPlatform||'—')}</td><td><span class="status-pill ${normStatus(e.status)==='ACTIVE'?'complete':'empty'}">${esc(normStatus(e.status))}</span></td>${canManage ? `<td><div class="employee-row-actions"><button type="button" class="button button-outline employee-edit" data-id="${esc(e.id)}">Edit</button><button type="button" class="button button-outline employee-remove" data-id="${esc(e.id)}">Remove</button></div></td>` : ''}</tr>`).join('') : `<tr><td colspan="${canManage ? 6 : 5}" class="table-empty">No employees match these filters.</td></tr>`;
+    if (canManage) {
+      $('#employee-rows').querySelectorAll('.employee-edit').forEach(button => button.addEventListener('click', () => startEdit(button.dataset.id)));
+      $('#employee-rows').querySelectorAll('.employee-remove').forEach(button => button.addEventListener('click', () => removeEmployee(button.dataset.id)));
+    }
     const active=employees.filter(e=>normStatus(e.status)==='ACTIVE').length;
     $('#employee-summary').innerHTML = `<div class="module-summary-item"><span>Total employees</span><strong>${employees.length}</strong></div><div class="module-summary-item"><span>Active</span><strong>${active}</strong></div><div class="module-summary-item"><span>Inactive</span><strong>${employees.length-active}</strong></div>`;
   }
@@ -81,15 +86,77 @@ export async function renderEmployeesPage(container, profile) {
     }
     await load(); return {saved,failures};
   }
+  async function startEdit(id) {
+    const employee = employees.find(item => item.id === id);
+    if (!employee) return;
+    editingEmployeeId = id;
+    $('#employee-modal-title').textContent = 'Edit employee';
+    $('#save-employee').textContent = 'Save changes';
+    $('#emp-id').value = employee.employeeId || employee.id;
+    $('#emp-id').readOnly = true;
+    $('#emp-name').value = employee.name || '';
+    $('#emp-department').value = employee.department || 'GS';
+    $('#emp-platform').value = employee.platformId || employee.defaultPlatform || '';
+    $('#emp-status').value = normStatus(employee.status);
+    $('#employee-modal').classList.remove('hidden');
+  }
+  async function removeEmployee(id) {
+    const employee = employees.find(item => item.id === id);
+    if (!employee) return;
+    if (!window.confirm(`Remove employee ${employee.name || employee.employeeId || id}? This permanently deletes the employee record and cannot be undone.`)) return;
+    try {
+      await deleteDoc(doc(db, 'employees', id));
+      message(`Employee ${employee.employeeId || id} removed.`);
+      await load();
+    } catch (error) {
+      message(`Could not remove employee: ${friendlyError(error)}`, true);
+    }
+  }
+
   if(canManage) {
-    $('#add-employee').addEventListener('click',()=>$('#employee-modal').classList.remove('hidden'));
+    $('#add-employee').addEventListener('click',()=>{
+      editingEmployeeId = null;
+      $('#employee-modal-title').textContent = 'Add employee';
+      $('#save-employee').textContent = 'Save employee';
+      $('#employee-form').reset();
+      $('#emp-id').readOnly = false;
+      $('#employee-modal').classList.remove('hidden');
+    });
     $('#close-employee-modal').addEventListener('click',close); $('#cancel-employee').addEventListener('click',close);
     $('#employee-form').addEventListener('submit',async ev=>{
-      ev.preventDefault(); const row=validate(Object.fromEntries(new FormData(ev.currentTarget).entries()),new Set(employees.map(e=>normId(e.employeeId||e.id))));
-      if(row.errors.length){message(row.errors.join('. '),true);return;}
+      ev.preventDefault();
+      const raw = Object.fromEntries(new FormData(ev.currentTarget).entries());
       const btn=$('#save-employee'); btn.disabled=true; btn.textContent='Saving…';
-      const result=await saveRows([row]); btn.disabled=false; btn.textContent='Save employee';
-      if(result.saved){close();ev.currentTarget.reset();message(`Employee ${row.employeeId} saved.`);} else message(result.failures.join(' | ')||'Could not save.',true);
+      try {
+        if (editingEmployeeId) {
+          const employeeId = normId(raw.employeeId);
+          const name = clean(raw.name);
+          const department = clean(raw.department).toUpperCase();
+          const platformId = clean(raw.platformId);
+          const status = normStatus(raw.status);
+          const errors = [];
+          if (!validId(employeeId)) errors.push('Invalid employee ID');
+          if (!name || name.length > 100) errors.push('Name required (max 100)');
+          if (!DEPARTMENTS.includes(department)) errors.push('Department must be GS, DP or WD');
+          if (!platformId || platformId.length > 60) errors.push('Platform ID required (max 60)');
+          if (!STATUSES.includes(status)) errors.push('Status must be ACTIVE or INACTIVE');
+          if (errors.length) { message(errors.join('. '), true); return; }
+          await updateDoc(doc(db, 'employees', editingEmployeeId), { name, department, platformId, defaultPlatform: platformId, status, updatedAt: serverTimestamp() });
+          close(); ev.currentTarget.reset(); editingEmployeeId = null;
+          $('#emp-id').readOnly = false;
+          message(`Employee ${employeeId} updated.`);
+          await load();
+        } else {
+          const row=validate(raw,new Set(employees.map(e=>normId(e.employeeId||e.id))));
+          if(row.errors.length){message(row.errors.join('. '),true);return;}
+          const result=await saveRows([row]);
+          if(result.saved){close();ev.currentTarget.reset();message(`Employee ${row.employeeId} saved.`);} else message(result.failures.join(' | ')||'Could not save.',true);
+        }
+      } catch (error) {
+        message(`Could not save employee: ${friendlyError(error)}`, true);
+      } finally {
+        btn.disabled=false; btn.textContent=editingEmployeeId ? 'Save changes' : 'Save employee';
+      }
     });
     $('#download-employee-template').addEventListener('click',()=>{
       const sheet=XLSX.utils.json_to_sheet([{'Employee ID':'',Name:'',Department:'GS',Platform:'',Status:'ACTIVE'}]);

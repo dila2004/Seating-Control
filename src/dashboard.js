@@ -365,16 +365,73 @@ export async function renderDashboard(root, user, profile) {
   const fixedNavStyle = document.createElement('style');
   fixedNavStyle.id = 'sc-fixed-sidebar-style';
   fixedNavStyle.textContent = `
+    /* Keep the fixed sidebar and main workspace on one shared width system. */
+    .app-shell, .app-shell * { box-sizing: border-box; }
     @media (min-width: 901px) {
-      .app-shell { align-items: flex-start; }
-      .app-shell > .sidebar { position: fixed !important; inset: 0 auto 0 0; height: 100vh; max-height: 100vh; overflow-y: auto; overscroll-behavior: contain; z-index: 1000; }
-      .app-shell > .main-area { min-width: 0; margin-left: 260px; width: calc(100% - 260px); }
-      .app-shell > .main-area .topbar { position: sticky; top: 0; z-index: 900; }
+      .app-shell {
+        display: block !important;
+        position: relative;
+        min-height: 100vh;
+        width: 100%;
+        overflow-x: clip;
+      }
+      .app-shell > .sidebar {
+        position: fixed !important;
+        inset: 0 auto 0 0 !important;
+        width: 248px !important;
+        min-width: 248px !important;
+        max-width: 248px !important;
+        height: 100vh !important;
+        max-height: 100vh !important;
+        overflow-x: hidden;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        z-index: 1000;
+      }
+      .app-shell > .main-area {
+        display: block !important;
+        position: relative;
+        min-width: 0 !important;
+        margin: 0 0 0 248px !important;
+        width: calc(100% - 248px) !important;
+        max-width: calc(100% - 248px) !important;
+      }
+      .app-shell > .main-area > .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 900;
+        width: 100%;
+        min-width: 0;
+      }
+      .app-shell > .main-area > .page-content {
+        width: 100%;
+        min-width: 0;
+      }
     }
     @media (max-width: 900px) {
-      .app-shell > .sidebar { position: relative; inset: auto; height: auto; max-height: none; overflow: visible; }
-      .app-shell > .main-area { margin-left: 0; width: 100%; }
-      .app-shell > .main-area .topbar { position: sticky; top: 0; z-index: 900; }
+      .app-shell { display: block !important; width: 100%; overflow-x: clip; }
+      .app-shell > .sidebar {
+        position: relative !important;
+        inset: auto !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible;
+      }
+      .app-shell > .main-area {
+        display: block !important;
+        margin: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      .app-shell > .main-area > .topbar {
+        position: sticky;
+        top: 0;
+        z-index: 900;
+        width: 100%;
+      }
     }
   `;
   document.head.querySelector('#sc-fixed-sidebar-style')?.remove();
