@@ -218,10 +218,34 @@ export async function renderDashboard(root, user, profile) {
 
 
 
-    <div class="app-shell">
-
-
-
+    <div class="app-shell" id="sc-app-shell">
+      <style id="sc-dashboard-ui-style">
+        .app-shell{--sc-bg:#f3f6fb;--sc-surface:#fff;--sc-surface-soft:#f7f9fc;--sc-text:#142b49;--sc-muted:#667b98;--sc-border:#dbe5f1;--sc-primary:#2563eb;background:var(--sc-bg);color:var(--sc-text);min-height:100vh}
+        .app-shell .main-area{min-width:0;background:var(--sc-bg)}
+        .app-shell .page-content{min-width:0}
+        .app-shell .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--sc-surface);border-bottom:1px solid var(--sc-border)}
+        .app-shell .topbar-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+        .app-shell .theme-toggle{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--sc-border);border-radius:9px;background:var(--sc-surface);color:var(--sc-text);padding:8px 11px;font:inherit;font-size:12px;font-weight:650;cursor:pointer}
+        .app-shell .theme-toggle:hover{border-color:var(--sc-primary)}
+        .app-shell .page-heading,.app-shell .section-title{gap:14px;flex-wrap:wrap}
+        .app-shell .summary-strip,.app-shell .stat-card,.app-shell .panel,.app-shell .phase-note{background:var(--sc-surface);color:var(--sc-text);border-color:var(--sc-border)}
+        .app-shell .summary-label,.app-shell .stat-hint,.app-shell .panel-heading p,.app-shell .page-heading p,.app-shell .section-title p,.app-shell .panel-note,.app-shell .capacity-caption{color:var(--sc-muted)}
+        .app-shell .platform-category{border-color:var(--sc-border)!important;background:var(--sc-surface)!important}
+        .app-shell .platform-category summary{background:var(--sc-surface-soft)!important;color:var(--sc-text)}
+        .app-shell .platform-card{background:var(--sc-surface);border:1px solid var(--sc-border);border-radius:10px;padding:12px;color:var(--sc-text)}
+        .app-shell .loading-line,.app-shell .empty-state{color:var(--sc-muted)}
+        .app-shell[data-theme="dark"]{--sc-bg:#0b1220;--sc-surface:#111c2e;--sc-surface-soft:#17243a;--sc-text:#e6edf7;--sc-muted:#9eb0ca;--sc-border:#2a3a53;--sc-primary:#70a5ff;color-scheme:dark}
+        .app-shell[data-theme="dark"] .sidebar{background:#0a1526;border-color:#23334b}
+        .app-shell[data-theme="dark"] .topbar,.app-shell[data-theme="dark"] .summary-strip,.app-shell[data-theme="dark"] .stat-card,.app-shell[data-theme="dark"] .panel,.app-shell[data-theme="dark"] .phase-note,.app-shell[data-theme="dark"] .platform-card{background:var(--sc-surface);color:var(--sc-text);border-color:var(--sc-border)}
+        .app-shell[data-theme="dark"] .top-date,.app-shell[data-theme="dark"] .user-meta small,.app-shell[data-theme="dark"] .page-heading p,.app-shell[data-theme="dark"] .section-title p,.app-shell[data-theme="dark"] .panel-heading p,.app-shell[data-theme="dark"] .stat-hint,.app-shell[data-theme="dark"] .summary-label,.app-shell[data-theme="dark"] .panel-note,.app-shell[data-theme="dark"] .capacity-caption{color:var(--sc-muted)}
+        .app-shell[data-theme="dark"] .platform-category summary{background:var(--sc-surface-soft)!important;color:var(--sc-text)}
+        .app-shell[data-theme="dark"] .button-outline,.app-shell[data-theme="dark"] .button-ghost,.app-shell[data-theme="dark"] .theme-toggle{background:var(--sc-surface-soft);color:var(--sc-text);border-color:var(--sc-border)}
+        .app-shell[data-theme="dark"] .sc-settings .sc-card,.app-shell[data-theme="dark"] .sc-settings .sc-settings-card{background:var(--sc-surface);color:var(--sc-text);border-color:var(--sc-border)}
+        .app-shell[data-theme="dark"] .sc-settings h2,.app-shell[data-theme="dark"] .sc-settings h3,.app-shell[data-theme="dark"] .sc-settings .sc-muted{color:var(--sc-text)}
+        .app-shell[data-theme="dark"] input,.app-shell[data-theme="dark"] select,.app-shell[data-theme="dark"] textarea{background:#0b1525;color:var(--sc-text);border-color:var(--sc-border)}
+        @media(max-width:900px){.app-shell .lower-grid{grid-template-columns:1fr}.app-shell .summary-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.app-shell .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+        @media(max-width:560px){.app-shell .topbar-right{gap:7px}.app-shell .user-meta{max-width:130px}.app-shell .summary-strip,.app-shell .stats-grid{grid-template-columns:1fr}.app-shell .theme-toggle{padding:7px 9px}.app-shell .platform-category summary{align-items:flex-start!important}.app-shell .platform-category summary>span:last-child{white-space:normal!important}}
+      </style>
       <aside class="sidebar">
 
 
@@ -250,7 +274,7 @@ export async function renderDashboard(root, user, profile) {
 
 
 
-        <header class="topbar"><div class="mobile-brand">SC <strong>Seating Control Center</strong></div><div class="topbar-right"><span class="top-date">${fmtDate()}</span><span class="avatar">${escapeHtml((profile.name || user.email || 'U').slice(0, 1).toUpperCase())}</span><div class="user-meta"><strong>${escapeHtml(profile.name || user.email || 'User')}</strong><small>${roleLabels[role] || role}</small></div><button class="button button-ghost button-small" id="logout-btn">Log out</button></div></header>
+        <header class="topbar"><div class="mobile-brand">SC <strong>Seating Control Center</strong></div><div class="topbar-right"><span class="top-date">${fmtDate()}</span><button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch color theme"><span id="theme-toggle-icon">☾</span><span id="theme-toggle-label">Dark mode</span></button><span class="avatar">${escapeHtml((profile.name || user.email || 'U').slice(0, 1).toUpperCase())}</span><div class="user-meta"><strong>${escapeHtml(profile.name || user.email || 'User')}</strong><small>${roleLabels[role] || role}</small></div><button class="button button-ghost button-small" id="logout-btn">Log out</button></div></header>
 
 
 
@@ -320,6 +344,41 @@ export async function renderDashboard(root, user, profile) {
 
 
 
+
+  const appShell = root.querySelector('#sc-app-shell');
+  const themeButton = root.querySelector('#theme-toggle');
+  const themeIcon = root.querySelector('#theme-toggle-icon');
+  const themeLabel = root.querySelector('#theme-toggle-label');
+  const savedTheme = (() => { try { return localStorage.getItem('sc-theme') === 'dark' ? 'dark' : 'light'; } catch { return 'light'; } })();
+  const applyTheme = (theme) => {
+    if (!appShell) return;
+    appShell.dataset.theme = theme;
+    if (themeIcon) themeIcon.textContent = theme === 'dark' ? '☀' : '☾';
+    if (themeLabel) themeLabel.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+    if (themeButton) themeButton.setAttribute('aria-label', theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode');
+    try { localStorage.setItem('sc-theme', theme); } catch { /* storage may be unavailable */ }
+  };
+  applyTheme(savedTheme);
+  themeButton?.addEventListener('click', () => applyTheme(appShell?.dataset.theme === 'dark' ? 'light' : 'dark'));
+
+  // Keep workspace navigation visible while the page content scrolls.
+  const fixedNavStyle = document.createElement('style');
+  fixedNavStyle.id = 'sc-fixed-sidebar-style';
+  fixedNavStyle.textContent = `
+    @media (min-width: 901px) {
+      .app-shell { align-items: flex-start; }
+      .app-shell > .sidebar { position: fixed !important; inset: 0 auto 0 0; height: 100vh; max-height: 100vh; overflow-y: auto; overscroll-behavior: contain; z-index: 1000; }
+      .app-shell > .main-area { min-width: 0; margin-left: 260px; width: calc(100% - 260px); }
+      .app-shell > .main-area .topbar { position: sticky; top: 0; z-index: 900; }
+    }
+    @media (max-width: 900px) {
+      .app-shell > .sidebar { position: relative; inset: auto; height: auto; max-height: none; overflow: visible; }
+      .app-shell > .main-area { margin-left: 0; width: 100%; }
+      .app-shell > .main-area .topbar { position: sticky; top: 0; z-index: 900; }
+    }
+  `;
+  document.head.querySelector('#sc-fixed-sidebar-style')?.remove();
+  document.head.appendChild(fixedNavStyle);
 
   root.querySelector('#logout-btn').addEventListener('click', async () => { try { await logout(); } catch (e) { showAlert(friendlyError(e)); } });
 
