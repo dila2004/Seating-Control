@@ -20,6 +20,8 @@ const validPlatformId = (value) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) && v
 
 export async function renderPlatformsPage(container, profile) {
   const canManage = profile?.role === 'ADMIN' && profile?.status === 'ACTIVE';
+  let editingId = null;
+  let seatings = [];
 
   container.innerHTML = `
     <section class="module-page">
@@ -38,15 +40,23 @@ export async function renderPlatformsPage(container, profile) {
       <div class="panel module-table-panel">
         <div class="panel-heading"><div><h3>Platform directory</h3><p>Platform IDs such as jax-1, kane-1, and iris-7 are supported.</p></div><span class="panel-chip" id="platform-result-count">Loading…</span></div>
         <div id="platform-message" class="module-message hidden" role="status"></div>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Platform</th><th>Platform ID</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody id="platform-rows"><tr><td colspan="5" class="table-empty">Loading platforms…</td></tr></tbody></table></div>
+        <div class="table-wrap"><table class="data-table"><thead><tr><th>Category</th><th>Platform</th><th>Platform ID</th><th>Laptop allocation (GS / DP / WD)</th><th>Seating balance</th><th>Status</th><th>Actions</th></tr></thead><tbody id="platform-rows"><tr><td colspan="7" class="table-empty">Loading platforms…</td></tr></tbody></table></div>
       </div>
       <div class="phase-note"><div class="phase-icon">i</div><div><strong>Flexible platform IDs</strong><p>IDs may contain lowercase letters, numbers and hyphens. Platform changes are restricted by Firestore Security Rules.</p></div></div>
     </section>
     <div class="modal-backdrop hidden" id="platform-modal" role="dialog" aria-modal="true" aria-labelledby="platform-modal-title">
       <div class="modal-card"><div class="modal-heading"><div><div class="eyebrow">PLATFORM CONFIGURATION</div><h2 id="platform-modal-title">Add platform</h2></div><button class="icon-button" id="close-platform-modal" aria-label="Close">×</button></div>
         <div class="module-message warning-message">Use a unique ID, for example <strong>jax-1</strong>. IDs are saved in lowercase.</div>
-        <form id="platform-form"><label for="platform-name">Platform name</label><input id="platform-name" name="name" placeholder="e.g. Jax 1" required maxlength="80">
-        <label for="platform-id">Platform ID</label><input id="platform-id" name="platformId" placeholder="e.g. jax-1" required minlength="2" maxlength="40" pattern="[A-Za-z0-9]+(-[A-Za-z0-9]+)*" title="Use letters/numbers separated by hyphens, e.g. jax-1">
+        <form id="platform-form">
+        <label for="platform-category">Main category</label><input id="platform-category" name="category" placeholder="e.g. JAX, KANE, IRIS" required maxlength="40">
+        <label for="platform-name">Platform name</label><input id="platform-name" name="name" placeholder="e.g. Jax 1" required maxlength="80">
+        <label for="platform-id">Sub-category / Platform ID</label><input id="platform-id" name="platformId" placeholder="e.g. jax-1" required minlength="2" maxlength="40" pattern="[A-Za-z0-9]+(-[A-Za-z0-9]+)*" title="Use letters/numbers separated by hyphens, e.g. jax-1">
+        <p class="muted-inline">Laptop allocation (these are expected seats, not a permanent limit)</p>
+        <div class="platform-capacity-grid">
+          <label for="platform-gs">GS laptops<input id="platform-gs" type="number" min="0" max="500" value="0" required></label>
+          <label for="platform-dp">DP laptops<input id="platform-dp" type="number" min="0" max="500" value="0" required></label>
+          <label for="platform-wd">WD laptops<input id="platform-wd" type="number" min="0" max="500" value="0" required></label>
+        </div>
         <label for="platform-description">Description <span class="muted-inline">(optional)</span></label><textarea id="platform-description" name="description" rows="3" maxlength="300" placeholder="Short description"></textarea>
         <div class="modal-actions"><button type="button" class="button button-outline" id="cancel-platform-modal">Cancel</button><button type="submit" class="button button-primary" id="save-platform">Save platform</button></div></form>
       </div>
@@ -61,6 +71,16 @@ export async function renderPlatformsPage(container, profile) {
     </div>
   `;
 
+  const style = document.createElement('style');
+  style.textContent = `
+    .platform-capacity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:12px 0 16px}
+    .platform-capacity-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600}
+    .platform-capacity-grid input{width:100%;box-sizing:border-box}
+    .balance-pill{display:inline-block;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:700;white-space:nowrap}
+    .balance-low{background:#fee2e2;color:#991b1b}.balance-ok{background:#dcfce7;color:#166534}.balance-high{background:#dbeafe;color:#1d4ed8}.balance-na{background:#e5e7eb;color:#374151}
+    @media(max-width:700px){.platform-capacity-grid{grid-template-columns:1fr}}
+  `;
+  container.appendChild(style);
   const $ = (selector) => container.querySelector(selector);
   const rowsEl = $('#platform-rows');
   const messageEl = $('#platform-message');
@@ -74,7 +94,15 @@ export async function renderPlatformsPage(container, profile) {
     if (isError) messageEl.classList.add('warning-message');
   };
   const openModal = () => modal.classList.remove('hidden');
-  const closeModal = () => modal.classList.add('hidden');
+  const closeModal = () => {
+    modal.classList.add('hidden');
+    editingId = null;
+    $('#platform-form').reset();
+    $('#platform-id').disabled = false;
+    $('#platform-gs').value = 0; $('#platform-dp').value = 0; $('#platform-wd').value = 0;
+    $('#platform-modal-title').textContent = 'Add platform';
+    $('#save-platform').textContent = 'Save platform';
+  };
 
   $('#add-platform')?.addEventListener('click', openModal);
   const closeBulkModal = () => bulkModal.classList.add('hidden');
@@ -101,14 +129,47 @@ export async function renderPlatformsPage(container, profile) {
     rowsEl.innerHTML = filtered.length ? filtered.map((platform) => {
       const status = String(platform.status || 'ACTIVE').toUpperCase();
       const active = status === 'ACTIVE';
+      const category = String(platform.category || (platform.platformId || platform.id).split('-')[0] || '').toUpperCase();
+      const capacity = platform.laptopCapacity || {};
+      const expected = { GS: Number(capacity.GS || 0), DP: Number(capacity.DP || 0), WD: Number(capacity.WD || 0) };
+      const current = { GS: 0, DP: 0, WD: 0 };
+      seatings.filter(s => String(s.platformId || '').toLowerCase() === String(platform.platformId || platform.id).toLowerCase()
+        && ['PENDING','APPROVED','ACTIVE','LOCKED'].includes(String(s.status || '').toUpperCase()))
+        .forEach(s => { const d = String(s.department || s.employeeDepartment || s.employeeType || '').toUpperCase(); if (d in current) current[d] += 1; });
+      const expectedTotal = expected.GS + expected.DP + expected.WD;
+      const currentTotal = current.GS + current.DP + current.WD;
+      const balanceClass = expectedTotal === 0 ? 'balance-na' : currentTotal < expectedTotal ? 'balance-low' : currentTotal > expectedTotal ? 'balance-high' : 'balance-ok';
+      const balanceText = expectedTotal === 0 ? `${currentTotal} seated · capacity not set` : currentTotal < expectedTotal ? `${expectedTotal-currentTotal} seats available` : currentTotal > expectedTotal ? `${currentTotal-expectedTotal} over allocation` : 'Allocation full';
       return `<tr>
+        <td><strong>${escapeHtml(category)}</strong></td>
         <td><div class="table-primary-text">${escapeHtml(platform.name || platform.platformId || platform.id)}</div><div class="table-secondary-text">${escapeHtml(platform.description || 'No description')}</div></td>
         <td><code class="id-chip">${escapeHtml(platform.platformId || platform.id)}</code></td>
+        <td>GS ${expected.GS} · DP ${expected.DP} · WD ${expected.WD}<div class="table-secondary-text">Seated: GS ${current.GS}, DP ${current.DP}, WD ${current.WD}</div></td>
+        <td><span class="balance-pill ${balanceClass}">${escapeHtml(balanceText)}</span></td>
         <td><span class="status-pill ${active ? 'complete' : 'empty'}">${escapeHtml(status)}</span></td>
-        <td>${escapeHtml(platform.description || '—')}</td>
-        <td><button class="button button-outline button-small toggle-platform" data-id="${escapeHtml(platform.id)}" data-active="${active ? 'true' : 'false'}" ${canManage ? '' : 'disabled'}>${active ? 'Deactivate' : 'Activate'}</button></td>
+        <td><button class="button button-outline button-small edit-platform" data-id="${escapeHtml(platform.id)}" ${canManage ? '' : 'disabled'}>Edit</button> <button class="button button-outline button-small toggle-platform" data-id="${escapeHtml(platform.id)}" data-active="${active ? 'true' : 'false'}" ${canManage ? '' : 'disabled'}>${active ? 'Deactivate' : 'Activate'}</button></td>
       </tr>`;
-    }).join('') : `<tr><td colspan="5" class="table-empty">${term || filter !== 'ALL' ? 'No platforms match these filters.' : 'No platforms yet. Use Add platform to create your first platform.'}</td></tr>`;
+    }).join('') : `<tr><td colspan="7" class="table-empty">${term || filter !== 'ALL' ? 'No platforms match these filters.' : 'No platforms yet. Use Add platform to create your first platform.'}</td></tr>`;
+
+    rowsEl.querySelectorAll('.edit-platform').forEach((button) => {
+      button.addEventListener('click', () => {
+        if (!canManage) return;
+        const p = platforms.find(item => item.id === button.dataset.id);
+        if (!p) return;
+        editingId = p.id;
+        $('#platform-modal-title').textContent = 'Update platform';
+        $('#save-platform').textContent = 'Update platform';
+        $('#platform-category').value = String(p.category || (p.platformId || p.id).split('-')[0] || '').toUpperCase();
+        $('#platform-name').value = p.name || '';
+        $('#platform-id').value = p.platformId || p.id;
+        $('#platform-id').disabled = true;
+        $('#platform-description').value = p.description || '';
+        $('#platform-gs').value = Number(p.laptopCapacity?.GS || 0);
+        $('#platform-dp').value = Number(p.laptopCapacity?.DP || 0);
+        $('#platform-wd').value = Number(p.laptopCapacity?.WD || 0);
+        openModal();
+      });
+    });
 
     rowsEl.querySelectorAll('.toggle-platform').forEach((button) => {
       button.addEventListener('click', async () => {
@@ -138,9 +199,13 @@ export async function renderPlatformsPage(container, profile) {
     const button = $('#reload-platforms');
     button.disabled = true;
     button.textContent = 'Loading…';
-    rowsEl.innerHTML = '<tr><td colspan="5" class="table-empty">Loading platforms…</td></tr>';
+    rowsEl.innerHTML = '<tr><td colspan="7" class="table-empty">Loading platforms…</td></tr>';
     try {
       const snapshot = await getDocs(query(collection(db, 'platforms'), limit(500)));
+      try {
+        const seatingSnapshot = await getDocs(query(collection(db, 'seatings'), limit(1000)));
+        seatings = seatingSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch { seatings = []; }
       platforms = snapshot.docs
         .map((platformDoc) => ({ id: platformDoc.id, ...platformDoc.data() }))
         .sort((a, b) => a.id.localeCompare(b.id));
@@ -200,8 +265,14 @@ export async function renderPlatformsPage(container, profile) {
 
     const saveButton = $('#save-platform');
     const platformId = normalizePlatformId($('#platform-id').value);
+    const category = $('#platform-category').value.trim().toUpperCase();
     const name = $('#platform-name').value.trim();
     const description = $('#platform-description').value.trim();
+    const laptopCapacity = {
+      GS: Number($('#platform-gs').value || 0),
+      DP: Number($('#platform-dp').value || 0),
+      WD: Number($('#platform-wd').value || 0)
+    };
 
     if (!validPlatformId(platformId)) {
       showMessage('Use 2–40 lowercase letters/numbers with single hyphens between parts, e.g. jax-1.', true);
@@ -215,18 +286,30 @@ export async function renderPlatformsPage(container, profile) {
     saveButton.disabled = true;
     saveButton.textContent = 'Saving…';
     try {
-      // Firestore Security Rules must enforce active ADMIN permissions and validate fields.
-      await setDoc(doc(db, 'platforms', platformId), {
-        platformId,
-        name,
-        description,
-        status: 'ACTIVE',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
+      if (!category) { showMessage('Enter the main category, e.g. JAX or KANE.', true); return; }
+      if (Object.values(laptopCapacity).some(n => !Number.isInteger(n) || n < 0 || n > 500)) {
+        showMessage('Laptop counts must be whole numbers between 0 and 500.', true); return;
+      }
+      // Updates only the platform configuration fields; existing platform status and records are preserved.
+      const wasEditing = Boolean(editingId);
+      const payload = { category, name, description, laptopCapacity, updatedAt: serverTimestamp() };
+      if (editingId) {
+        await updateDoc(doc(db, 'platforms', editingId), payload);
+      } else {
+        if (platforms.some(p => normalizePlatformId(p.platformId || p.id) === platformId)) {
+          showMessage(`Platform ID already exists: ${platformId}.`, true); return;
+        }
+        await setDoc(doc(db, 'platforms', platformId), {
+          platformId, ...payload, status: 'ACTIVE', createdAt: serverTimestamp()
+        });
+      }
       closeModal();
       $('#platform-form').reset();
-      showMessage(`Platform ${platformId} created successfully.`);
+      $('#platform-id').disabled = false;
+      editingId = null;
+      $('#platform-modal-title').textContent = 'Add platform';
+      $('#save-platform').textContent = 'Save platform';
+      showMessage(`Platform ${platformId} ${wasEditing ? 'updated' : 'saved'} successfully.`);
       await load();
     } catch (error) {
       showMessage(friendlyError(error), true);

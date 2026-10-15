@@ -5,30 +5,32 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function userDocExists() {
+      return signedIn() && exists(userPath());
+    }
+
     function userDoc() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return get(userPath()).data;
     }
 
     function activeUser() {
-      return signedIn()
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && userDoc().status == 'ACTIVE';
+      return userDocExists() && userDoc().status == 'ACTIVE';
     }
 
     function hasRole(roles) {
       return activeUser() && userDoc().role in roles;
     }
 
-    // A user may read only their own profile. Client writes are deliberately disabled.
-    // Create/update user profiles using a trusted Admin SDK process or Cloud Function.
     match /users/{uid} {
       allow get: if signedIn() && request.auth.uid == uid;
       allow list: if hasRole(['ADMIN']);
       allow create, update, delete: if false;
     }
 
-    // Phase 1: authenticated active users can read operational reference data.
-    // Operational writes will be added through validated Cloud Functions in later phases.
     match /employees/{employeeId} {
       allow read: if activeUser();
       allow write: if false;
@@ -46,7 +48,7 @@ service cloud.firestore {
 
     match /settings/{settingId} {
       allow read: if activeUser();
-      allow write: if hasRole(['ADMIN']) && false;
+      allow write: if false;
     }
 
     match /seatingHistory/{historyId} {
@@ -59,7 +61,11 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Deny access to all collections not explicitly allowed above.
+    match /seatingChangeRequests/{requestId} {
+      allow read: if hasRole(['PIC', 'TL', 'SPV', 'ADMIN']);
+      allow write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

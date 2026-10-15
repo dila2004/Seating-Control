@@ -9,10 +9,18 @@ const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 }[c]));
 const clean = (v) => String(v ?? '').trim();
-const todayLocal = () => {
-  const d = new Date();
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
+const todayLocal = () => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit'
+}).format(new Date());
+
+const currentShiftSL = () => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: false
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value || 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value || 0);
+  const mins = hour * 60 + minute;
+  return mins >= 510 && mins < 1230 ? 'MORNING' : 'NIGHT';
 };
 const statusPill = (status) => `<span class="status-pill ${status === 'ACTIVE' ? 'complete' : 'empty'}">${esc(status)}</span>`;
 
@@ -36,12 +44,30 @@ export async function renderPicsPage(container, profile) {
           <tbody id="pic-rows"><tr><td colspan="4" class="table-empty">Loading…</td></tr></tbody></table></div>
       </div>
       <div class="panel module-table-panel" style="margin-top:20px">
-        <div class="panel-heading"><div><h3>Daily platform assignments</h3>
-          <p>Assign a PIC per platform, date and shift. Day: 08:30–20:30 · Night: 20:30–08:30. Assignments do not carry over between shifts.</p></div>
-          ${admin ? '<button class="button button-primary" id="add-assignment">＋ Assign PIC for day</button>' : ''}
-        </div>
-        <div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Shift</th><th>Platform</th><th>PIC</th><th>Status</th>${admin ? '<th>Actions</th>' : ''}</tr></thead>
-          <tbody id="assignment-rows"><tr><td colspan="${admin ? 6 : 5}" class="table-empty">Loading…</td></tr></tbody></table></div>
+        <details id="daily-assignments-panel" open>
+          <summary style="display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;cursor:pointer;list-style:none;padding:18px 20px">
+            <span><strong style="display:block;font-size:16px">Daily platform assignments</strong>
+              <span style="display:block;color:var(--muted);font-size:12px;margin-top:5px">PIC assignments are separate for each date and shift. Day: 08:30–20:30 · Night: 20:30–08:30.</span></span>
+            ${admin ? '<button type="button" class="button button-primary" id="add-assignment">＋ Assign PIC</button>' : ''}
+          </summary>
+          <div style="padding:0 20px 18px">
+            <div style="display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding:14px 0">
+              <label style="display:grid;gap:6px;font-size:12px;color:var(--muted)">Business date
+                <input id="assignment-filter-date" type="date" style="min-width:170px" />
+              </label>
+              <label style="display:grid;gap:6px;font-size:12px;color:var(--muted)">Shift
+                <select id="assignment-filter-shift" style="min-width:180px">
+                  <option value="MORNING">Day · 08:30–20:30</option>
+                  <option value="NIGHT">Night · 20:30–08:30</option>
+                </select>
+              </label>
+              <button type="button" class="button button-outline" id="refresh-assignments">↻ Refresh</button>
+              <span id="assignment-filter-summary" style="font-size:12px;color:var(--muted)">Showing current shift only</span>
+            </div>
+            <div class="table-wrap"><table class="data-table"><thead><tr><th>Date</th><th>Shift</th><th>Platform</th><th>PIC</th><th>Status</th>${admin ? '<th>Actions</th>' : ''}</tr></thead>
+              <tbody id="assignment-rows"><tr><td colspan="${admin ? 6 : 5}" class="table-empty">Loading…</td></tr></tbody></table></div>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -69,7 +95,9 @@ export async function renderPicsPage(container, profile) {
       </div>
     </div>`;
 
+  container.querySelector('#pic-management-polish')?.remove();
   const style = document.createElement('style');
+  style.id = 'pic-management-polish';
   style.textContent = `
     .pic-assignment-modal .pic-assignment-form { display:flex; flex-direction:column; gap:16px; }
     .pic-assignment-modal .pic-form-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:16px; }
@@ -79,6 +107,19 @@ export async function renderPicsPage(container, profile) {
     .pic-assignment-modal input, .pic-assignment-modal select { width:100%; box-sizing:border-box; min-height:44px; border:1px solid #d6e0ee; border-radius:9px; padding:10px 12px; background:#fff; color:#1f2937; font:inherit; }
     .pic-assignment-modal small { color:#64748b; font-size:12px; }\n    .button-small { padding:7px 10px; font-size:12px; }
     .pic-assignment-modal .modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:6px; }
+
+    #daily-assignments-panel { border:1px solid var(--border, #dbe4f0); border-radius:14px; overflow:hidden; }
+    #daily-assignments-panel > summary { background:linear-gradient(180deg,#fff,#f8faff); color:var(--text,#12233f); }
+    #daily-assignments-panel > summary::marker { color:#3867df; }
+    #daily-assignments-panel[open] > summary { border-bottom:1px solid var(--border,#dbe4f0); }
+    #assignment-filter-date, #assignment-filter-shift { min-height:42px; border:1px solid #d6e0ee; border-radius:9px; padding:9px 11px; background:#fff; color:#172b4d; }
+    #assignment-filter-date:focus, #assignment-filter-shift:focus, .pic-assignment-modal input:focus, .pic-assignment-modal select:focus { outline:3px solid rgba(56,103,223,.14); border-color:#3867df; }
+    #refresh-pics, #refresh-assignments { min-height:40px; transition:background .15s ease, transform .15s ease; }
+    #refresh-pics:hover, #refresh-assignments:hover { background:#edf3ff; transform:translateY(-1px); }
+    #refresh-pics:disabled, #refresh-assignments:disabled { opacity:.65; cursor:wait; transform:none; }
+    #pic-message { margin:0 0 16px; padding:12px 14px; border-radius:10px; }
+    #pic-rows tr:hover, #assignment-rows tr:hover { background:#f8faff; }
+    .pic-search-result:hover { background:#f1f6ff !important; }
     @media(max-width:560px) { .pic-assignment-modal .pic-form-grid { grid-template-columns:1fr; } .pic-assignment-modal .pic-field-full { grid-column:auto; } }
   `;
   container.appendChild(style);
@@ -171,8 +212,14 @@ export async function renderPicsPage(container, profile) {
   async function loadAssignments() {
     try {
       const snap = await getDocs(query(collection(db, 'picAssignments'), limit(500)));
+      const selectedDate = $('#assignment-filter-date')?.value || todayLocal();
+      const selectedShift = $('#assignment-filter-shift')?.value || currentShiftSL();
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
-        .sort((a, b) => `${b.date || ''}${b.shift || ''}`.localeCompare(`${a.date || ''}${a.shift || ''}`));
+        .filter((a) => String(a.date || '').slice(0, 10) === selectedDate
+          && String(a.shift || '').toUpperCase() === selectedShift)
+        .sort((a, b) => String(a.platformId || '').localeCompare(String(b.platformId || '')));
+      const summary = $('#assignment-filter-summary');
+      if (summary) summary.textContent = `Showing ${selectedShift === 'MORNING' ? 'Day' : 'Night'} shift for ${selectedDate} only. Other shifts are not carried over.`;
       const colspan = admin ? 6 : 5;
       $('#assignment-rows').innerHTML = rows.length
         ? rows.map((a) => `<tr>
@@ -348,10 +395,8 @@ export async function renderPicsPage(container, profile) {
         delete $('#assignment-form').dataset.editId;
         $('#assignment-modal-title').textContent = 'Assign PIC to platform';
         $('#save-assignment').textContent = 'Save assignment';
-        $('#assignment-date').value = todayLocal();
-        const now = new Date();
-        const minutes = now.getHours() * 60 + now.getMinutes();
-        $('#assignment-shift').value = minutes >= 510 && minutes < 1230 ? 'MORNING' : 'NIGHT';
+        $('#assignment-date').value = $('#assignment-filter-date')?.value || todayLocal();
+        $('#assignment-shift').value = $('#assignment-filter-shift')?.value || currentShiftSL();
         $('#assignment-modal').classList.remove('hidden');
       } catch (e) {
         msg(`Could not load platforms or PICs: ${friendlyError(e)}`, true);
@@ -412,8 +457,43 @@ export async function renderPicsPage(container, profile) {
       }
     });
   }
+  // Default to Sri Lanka's current business date and shift; assignments are filtered
+  // by both values so a PIC from the previous shift never appears as today's PIC.
+  $('#assignment-filter-date').value = todayLocal();
+  $('#assignment-filter-shift').value = currentShiftSL();
+  $('#assignment-filter-date').addEventListener('change', loadAssignments);
+  $('#assignment-filter-shift').addEventListener('change', loadAssignments);
+  $('#refresh-assignments').addEventListener('click', async () => {
+    const button = $('#refresh-assignments');
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Refreshing…';
+    try {
+      await loadAssignments();
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
+  });
+  $('#add-assignment')?.addEventListener('click', (event) => event.stopPropagation());
+  $('#daily-assignments-panel summary')?.addEventListener('click', (event) => {
+    if (event.target.closest('#add-assignment')) event.preventDefault();
+  });
+
   $('#refresh-pics').addEventListener('click', async () => {
-    await loadPics(); await loadAssignments();
+    const button = $('#refresh-pics');
+    const original = button.textContent;
+    button.disabled = true;
+    button.textContent = 'Refreshing…';
+    try {
+      await Promise.all([loadPics(), loadAssignments()]);
+      msg('PIC directory and assignments refreshed.');
+    } catch (e) {
+      msg(`Refresh failed: ${friendlyError(e)}`, true);
+    } finally {
+      button.disabled = false;
+      button.textContent = original;
+    }
   });
   await loadPics();
   await loadAssignments();
